@@ -377,9 +377,11 @@ function NumbersPage() {
         setOptimisticActive(null);
         setPolledOtp(null);
         if (res.data?.refunded && res.data.refundAmountPkr) {
-          toast.success(`Number cancelled. PKR ${res.data.refundAmountPkr} refunded to your wallet.`);
+          toast.success(
+            `Number cancel ho gaya. PKR ${res.data.refundAmountPkr} wallet mein wapas aa gaye.`,
+          );
         } else {
-          toast.success("Number released successfully");
+          toast.success("Number release ho gaya (OTP mil chuka tha — refund nahi hua).");
         }
         invalidateWallet();
         void refresh();
@@ -407,9 +409,20 @@ function NumbersPage() {
   }, [active?.otpStatus, active?.parsedOtp, polledOtp]);
 
   const handleCancelNumber = useCallback(() => {
-    setPendingPostOtpAction("cancel");
-    setShowPostOtpWarningDialog(true);
-  }, []);
+    const received =
+      active?.otpStatus === "RECEIVED" || Boolean(active?.parsedOtp ?? polledOtp);
+    if (received) {
+      setPendingPostOtpAction("cancel");
+      setShowPostOtpWarningDialog(true);
+      return;
+    }
+    void releaseActiveNumber();
+  }, [
+    active?.otpStatus,
+    active?.parsedOtp,
+    polledOtp,
+    releaseActiveNumber,
+  ]);
 
   const confirmChangeNumber = useCallback(async () => {
     if (!token) return;
