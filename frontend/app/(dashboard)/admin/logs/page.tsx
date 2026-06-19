@@ -39,12 +39,18 @@ export default function AdminLogsPage(): React.ReactElement {
     ...(debouncedSearch && { search: debouncedSearch }),
   });
 
-  const { data, isLoading, mutate } = useApi<{
+  const { data, isLoading, error, mutate } = useApi<{
     items: AdminLogRow[];
     total: number;
   }>(`/api/admin/logs?${query.toString()}`, {
     cacheTtlMs: 30_000,
   });
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error.message || "Failed to load admin logs.");
+    }
+  }, [error]);
 
   const items = data?.items ?? null;
   const total = data?.total ?? 0;
@@ -156,6 +162,10 @@ export default function AdminLogsPage(): React.ReactElement {
         <CardContent>
           {isLoading ? (
             <Skeleton className="h-64 w-full" />
+          ) : error ? (
+            <p className="text-sm text-destructive">
+              {error.message || "Failed to load admin logs."}
+            </p>
           ) : !items ? null : (
             <>
               <div className="overflow-x-auto">

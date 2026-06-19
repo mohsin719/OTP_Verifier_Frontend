@@ -17,8 +17,7 @@ export function useApi<T>(
       });
       
       if (!res.success) {
-        console.error(`API Error for ${url}:`, res.error);
-        return null as T;
+        throw new Error(res.error);
       }
       
       return res.data;
