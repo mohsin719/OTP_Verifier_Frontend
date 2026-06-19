@@ -442,6 +442,6 @@ export async function getAdminStats(
   accessToken?: string | null,
   refresh = false,
 ): Promise<ApiResult<unknown>> {
-  const path = refresh ? '/api/admin/stats?refresh=true' : '/api/admin/stats';
+  const path = refresh ? '/api/manage/stats?refresh=true' : '/api/manage/stats';
   return apiFetch<unknown>(path, { accessToken, disableDedupe: refresh });
 }

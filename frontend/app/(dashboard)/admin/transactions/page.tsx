@@ -43,7 +43,7 @@ export default function AdminTransactionsPage(): React.ReactElement {
   const { data, isLoading, mutate } = useApi<{
     items: Tx[];
     total: number;
-  }>(`/api/admin/transactions?${query.toString()}`, {
+  }>(`/api/manage/transactions?${query.toString()}`, {
     cacheTtlMs: 30_000,
   });
 
@@ -62,7 +62,7 @@ export default function AdminTransactionsPage(): React.ReactElement {
     if (!token) return;
     setIsRefreshing(true);
     const fresh = await apiFetch<{ items: Tx[]; total: number }>(
-      `/api/admin/transactions?${query.toString()}&refresh=true`,
+      `/api/manage/transactions?${query.toString()}&refresh=true`,
       {
         accessToken: token,
         disableDedupe: true,

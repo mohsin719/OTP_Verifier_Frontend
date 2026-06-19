@@ -44,7 +44,7 @@ export default function AdminFailureLogsPage(): React.ReactElement {
   const { data, isLoading, mutate } = useApi<{
     items: FailureLogRow[];
     total: number;
-  }>(`/api/admin/number-failure-logs?${query.toString()}`, {
+  }>(`/api/manage/number-failure-logs?${query.toString()}`, {
     cacheTtlMs: 30_000,
   });
 
@@ -63,7 +63,7 @@ export default function AdminFailureLogsPage(): React.ReactElement {
     if (!token) return;
     setIsRefreshing(true);
     const fresh = await apiFetch<{ items: FailureLogRow[]; total: number }>(
-      `/api/admin/number-failure-logs?${query.toString()}&refresh=true`,
+      `/api/manage/number-failure-logs?${query.toString()}&refresh=true`,
       {
         accessToken: token,
         disableDedupe: true,

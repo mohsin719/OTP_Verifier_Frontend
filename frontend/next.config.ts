@@ -8,6 +8,12 @@ const nextConfig: NextConfig = {
     maxInactiveAge: 25 * 1000,
     pagesBufferLength: 2,
   },
+  async rewrites() {
+    return [
+      { source: "/manage", destination: "/admin" },
+      { source: "/manage/:path*", destination: "/admin/:path*" },
+    ];
+  },
 };
 
 export default nextConfig;

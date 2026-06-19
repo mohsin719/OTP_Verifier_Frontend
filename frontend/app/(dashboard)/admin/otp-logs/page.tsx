@@ -44,7 +44,7 @@ export default function AdminOtpLogsPage(): React.ReactElement {
   const { data, isLoading, mutate } = useApi<{
     items: OtpLogRow[];
     total: number;
-  }>(`/api/admin/otp-logs?${query.toString()}`, {
+  }>(`/api/manage/otp-logs?${query.toString()}`, {
     cacheTtlMs: 30_000,
   });
 
@@ -63,7 +63,7 @@ export default function AdminOtpLogsPage(): React.ReactElement {
     if (!token) return;
     setIsRefreshing(true);
     const fresh = await apiFetch<{ items: OtpLogRow[]; total: number }>(
-      `/api/admin/otp-logs?${query.toString()}&refresh=true`,
+      `/api/manage/otp-logs?${query.toString()}&refresh=true`,
       {
         accessToken: token,
         disableDedupe: true,

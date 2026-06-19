@@ -153,7 +153,10 @@ function NumbersPage() {
     });
     socket.on("connect", () => setWsConnected(true));
     socket.on("disconnect", () => setWsConnected(false));
-    socket.on("otp:received", () => {
+    socket.on("otp:received", (payload?: { otp?: string }) => {
+      if (payload?.otp) {
+        setPolledOtp(payload.otp);
+      }
       void refresh();
       setOtpFlash(true);
       setTimeout(() => setOtpFlash(false), 2500);
@@ -169,7 +172,13 @@ function NumbersPage() {
   const [pollStartTime, setPollStartTime] = useState<number | null>(null);
   
   useEffect(() => {
-    if (!active?.e164 || active.otpStatus !== "PENDING" || !token) {
+    const awaitingOtp =
+      active?.otpStatus !== "EXPIRED" &&
+      active?.otpStatus !== "FAILED" &&
+      !active?.parsedOtp &&
+      !polledOtp;
+
+    if (!active?.e164 || !token || !awaitingOtp) {
       if (pollRef.current) clearInterval(pollRef.current);
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -222,7 +231,7 @@ function NumbersPage() {
       }
       setPollStartTime(null);
     };
-  }, [active?.e164, active?.otpStatus, token, refresh, pollStartTime]);
+  }, [active?.e164, active?.otpStatus, active?.parsedOtp, polledOtp, token, refresh, pollStartTime]);
 
   const invalidateWallet = useWalletStore((s) => s.invalidate);
 
@@ -356,7 +365,10 @@ function NumbersPage() {
     
     setLoadingRefresh(true);
     try {
-      const res = await apiFetch<{ success: boolean; error?: string }>("/api/numbers/release", {
+      const res = await apiFetch<{
+        refunded?: boolean;
+        refundAmountPkr?: number | null;
+      }>("/api/numbers/release", {
         method: "DELETE",
         accessToken: token,
       });
@@ -364,7 +376,11 @@ function NumbersPage() {
       if (res.success) {
         setOptimisticActive(null);
         setPolledOtp(null);
-        toast.success("Number released successfully");
+        if (res.data?.refunded && res.data.refundAmountPkr) {
+          toast.success(`Number cancelled. PKR ${res.data.refundAmountPkr} refunded to your wallet.`);
+        } else {
+          toast.success("Number released successfully");
+        }
         invalidateWallet();
         void refresh();
       } else {

@@ -34,14 +34,14 @@ export default function AdminDashboardPage() {
     maximumFractionDigits: 0,
   });
   const [isRefreshing, setIsRefreshing] = React.useState(false);
-  const { data: stats, error, isLoading, mutate } = useApi<AdminStats>("/api/admin/stats", {
+  const { data: stats, error, isLoading, mutate } = useApi<AdminStats>("/api/manage/stats", {
   cacheTtlMs: 30_000,
 });
 
   async function handleRefresh() {
     setIsRefreshing(true);
     try {
-      const res = await apiFetch<AdminStats>("/api/admin/stats?refresh=true", {
+      const res = await apiFetch<AdminStats>("/api/manage/stats?refresh=true", {
         accessToken: token,
         disableDedupe: true,
         cacheTtlMs: 0,
@@ -132,8 +132,9 @@ export default function AdminDashboardPage() {
             <CardDescription>Aggregate metrics for user acquisition and system load</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-80 min-w-0 w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            {stats && chartData.length > 0 ? (
+            <div className="h-80 min-h-[320px] min-w-0 w-full mt-4">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="oklch(1 0 0 / 0.1)" />
                   <XAxis dataKey="name" stroke="oklch(0.65 0.03 260)" tickLine={false} axisLine={false} dy={10} />
@@ -152,6 +153,11 @@ export default function AdminDashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            ) : (
+              <div className="h-80 min-h-[320px] flex items-center justify-center text-sm text-muted-foreground">
+                {isLoading ? "Loading chart…" : "No chart data yet"}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -162,15 +168,15 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3 text-sm">
-              <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/admin/users'}>
+              <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/manage/users'}>
                 <div className="font-medium text-foreground">User Management</div>
                 <div className="text-xs text-muted-foreground mt-1">Suspend accounts, adjust balances, and audit user activity logs.</div>
               </div>
-              <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/admin/numbers'}>
+              <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/manage/numbers'}>
                 <div className="font-medium text-foreground">Virtual Inventory</div>
                 <div className="text-xs text-muted-foreground mt-1">Add or remove leased lines, monitor provider connectivity and status.</div>
               </div>
-              <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/admin/transactions'}>
+              <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/manage/transactions'}>
                 <div className="font-medium text-foreground">Financial Ledger</div>
                 <div className="text-xs text-muted-foreground mt-1">Review all system debits, credits, and manual administrative transfers.</div>
               </div>

@@ -61,7 +61,7 @@ export default function AdminNumbersPage(): React.ReactElement {
   const { data, isLoading, mutate } = useApi<{
     items: NumberRow[];
     total: number;
-  }>(`/api/admin/numbers?${query.toString()}`, {
+  }>(`/api/manage/numbers?${query.toString()}`, {
     cacheTtlMs: 30_000,
   });
 
@@ -79,7 +79,7 @@ export default function AdminNumbersPage(): React.ReactElement {
   const syncFromTelnyx = async () => {
     if (!token) return;
     setSyncing(true);
-    const res = await apiFetch<SyncResult>("/api/admin/numbers/sync", {
+    const res = await apiFetch<SyncResult>("/api/manage/numbers/sync", {
       method: "POST",
       accessToken: token,
     });
@@ -96,7 +96,7 @@ export default function AdminNumbersPage(): React.ReactElement {
     );
 
     const fresh = await apiFetch<{ items: NumberRow[]; total: number }>(
-      `/api/admin/numbers?${query.toString()}&refresh=true`,
+      `/api/manage/numbers?${query.toString()}&refresh=true`,
       {
         accessToken: token,
         disableDedupe: true,
@@ -115,7 +115,7 @@ export default function AdminNumbersPage(): React.ReactElement {
     if (!token) return;
     setIsRefreshing(true);
     const fresh = await apiFetch<{ items: NumberRow[]; total: number }>(
-      `/api/admin/numbers?${query.toString()}&refresh=true`,
+      `/api/manage/numbers?${query.toString()}&refresh=true`,
       {
         accessToken: token,
         disableDedupe: true,

@@ -50,7 +50,7 @@ export default function AdminPlatformStatusPage(): React.ReactElement {
   const { data, isLoading, mutate } = useApi<{
     items: PlatformStatusRow[];
     total: number;
-  }>(`/api/admin/number-platform-status?${query.toString()}`, {
+  }>(`/api/manage/number-platform-status?${query.toString()}`, {
     cacheTtlMs: 30_000,
   });
 
@@ -69,7 +69,7 @@ export default function AdminPlatformStatusPage(): React.ReactElement {
     if (!token) return;
     setIsRefreshing(true);
     const fresh = await apiFetch<{ items: PlatformStatusRow[]; total: number }>(
-      `/api/admin/number-platform-status?${query.toString()}&refresh=true`,
+      `/api/manage/number-platform-status?${query.toString()}&refresh=true`,
       {
         accessToken: token,
         disableDedupe: true,

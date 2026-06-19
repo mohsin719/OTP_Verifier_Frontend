@@ -81,7 +81,7 @@ export default function AdminUsersPage(): React.ReactElement {
   const { data, isLoading, mutate } = useApi<{
     items: UserRow[];
     total: number;
-  }>(`/api/admin/users?${query.toString()}`, {
+  }>(`/api/manage/users?${query.toString()}`, {
     cacheTtlMs: 30_000,
   });
 
@@ -99,7 +99,7 @@ export default function AdminUsersPage(): React.ReactElement {
   const handleBan = async (userId: string, banned: boolean, reason?: string) => {
     if (!token) return;
     setIsBanning(true);
-    const endpoint = banned ? `/api/admin/users/${userId}/ban` : `/api/admin/users/${userId}/unban`;
+    const endpoint = banned ? `/api/manage/users/${userId}/ban` : `/api/manage/users/${userId}/unban`;
     const res = await apiFetch<{ success: true }>(endpoint, {
       method: "PATCH",
       accessToken: token,
@@ -125,7 +125,7 @@ export default function AdminUsersPage(): React.ReactElement {
     }
     setIsAdjusting(true);
     const res = await apiFetch<{ success: true; data: { balancePkr: number } }>(
-      `/api/admin/users/${balanceUserId}/balance`,
+      `/api/manage/users/${balanceUserId}/balance`,
       {
         method: "POST",
         accessToken: token,
@@ -157,7 +157,7 @@ export default function AdminUsersPage(): React.ReactElement {
     }
 
     setIsSelfTopupPending(true);
-    const res = await apiFetch<{ balancePkr: number }>(`/api/admin/users/${user.id}/balance`, {
+    const res = await apiFetch<{ balancePkr: number }>(`/api/manage/users/${user.id}/balance`, {
       method: "POST",
       accessToken: token,
       body: JSON.stringify({ amountPkr, reason: selfTopupReason.trim() }),
@@ -196,7 +196,7 @@ export default function AdminUsersPage(): React.ReactElement {
       adminBalancePkr: number;
       targetBalancePkr: number;
       targetPublicId: string;
-    }>("/api/admin/balance/transfer", {
+    }>("/api/manage/balance/transfer", {
       method: "POST",
       accessToken: token,
       body: JSON.stringify({
@@ -233,7 +233,7 @@ export default function AdminUsersPage(): React.ReactElement {
     if (!token) return;
     setIsRefreshing(true);
     const fresh = await apiFetch<{ items: UserRow[]; total: number }>(
-      `/api/admin/users?${query.toString()}&refresh=true`,
+      `/api/manage/users?${query.toString()}&refresh=true`,
       {
         accessToken: token,
         disableDedupe: true,

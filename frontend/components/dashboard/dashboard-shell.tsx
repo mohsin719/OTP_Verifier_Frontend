@@ -36,15 +36,15 @@ const nav = [
 ];
 
 const adminNav = [
-  { href: "/admin", label: "Admin", icon: Shield },
-  { href: "/admin/numbers", label: "Numbers", icon: Phone },
-  { href: "/admin/platform-status", label: "Platform Status", icon: Layers },
-  { href: "/admin/failure-logs", label: "Failure Logs", icon: AlertTriangle },
-  { href: "/admin/users", label: "Users", icon: Settings },
-  { href: "/admin/transactions", label: "Transactions", icon: CreditCard },
-  { href: "/admin/otp-logs", label: "OTP Logs", icon: History },
-  { href: "/admin/logs", label: "Admin Logs", icon: Shield },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
+  { href: "/manage", label: "Admin", icon: Shield },
+  { href: "/manage/numbers", label: "Numbers", icon: Phone },
+  { href: "/manage/platform-status", label: "Platform Status", icon: Layers },
+  { href: "/manage/failure-logs", label: "Failure Logs", icon: AlertTriangle },
+  { href: "/manage/users", label: "Users", icon: Settings },
+  { href: "/manage/transactions", label: "Transactions", icon: CreditCard },
+  { href: "/manage/otp-logs", label: "OTP Logs", icon: History },
+  { href: "/manage/logs", label: "Admin Logs", icon: Shield },
+  { href: "/manage/settings", label: "Settings", icon: Settings },
 ];
 
 export function DashboardShell({
@@ -156,15 +156,15 @@ export function DashboardShell({
     ];
 
     const adminRoutes = [
-      "/admin",
-      "/admin/numbers",
-      "/admin/platform-status",
-      "/admin/failure-logs",
-      "/admin/users",
-      "/admin/transactions",
-      "/admin/otp-logs",
-      "/admin/logs",
-      "/admin/settings",
+      "/manage",
+      "/manage/numbers",
+      "/manage/platform-status",
+      "/manage/failure-logs",
+      "/manage/users",
+      "/manage/transactions",
+      "/manage/otp-logs",
+      "/manage/logs",
+      "/manage/settings",
     ];
 
     const routes = user.role === "ADMIN" ? [...commonRoutes, ...adminRoutes] : commonRoutes;

@@ -42,7 +42,7 @@ export default function AdminLogsPage(): React.ReactElement {
   const { data, isLoading, error, mutate } = useApi<{
     items: AdminLogRow[];
     total: number;
-  }>(`/api/admin/logs?${query.toString()}`, {
+  }>(`/api/manage/logs?${query.toString()}`, {
     cacheTtlMs: 30_000,
   });
 
@@ -67,7 +67,7 @@ export default function AdminLogsPage(): React.ReactElement {
     if (!token) return;
     setIsRefreshing(true);
     const fresh = await apiFetch<{ items: AdminLogRow[]; total: number }>(
-      `/api/admin/logs?${query.toString()}&refresh=true`,
+      `/api/manage/logs?${query.toString()}&refresh=true`,
       {
         accessToken: token,
         disableDedupe: true,

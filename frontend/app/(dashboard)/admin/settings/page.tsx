@@ -31,7 +31,7 @@ export default function AdminSettingsPage() {
   async function handleSendOtp(): Promise<void> {
     if (!token) return;
     setSendingOtp(true);
-    const res = await apiFetch<void>("/api/admin/change-password/request-otp", {
+    const res = await apiFetch<void>("/api/manage/change-password/request-otp", {
       method: "POST",
       accessToken: token,
     });
@@ -60,7 +60,7 @@ export default function AdminSettingsPage() {
 
     if (!token) return;
     setConfirming(true);
-    const res = await apiFetch<void>("/api/admin/change-password/confirm", {
+    const res = await apiFetch<void>("/api/manage/change-password/confirm", {
       method: "POST",
       accessToken: token,
       body: JSON.stringify({ otp, newPassword }),
