@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build && node scripts/prepare-standalone.mjs",
-    "start": "node server.js",
+    "build": "next build && node scripts/post-export.mjs",
+    "start": "npx serve out -p 3000",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0"
   },
