@@ -140,40 +140,6 @@ export function DashboardShell({
     })();
   }, [token, user, setAuth, logout, router]);
 
-  // Prefetch only the current route for better performance
-  useEffect(() => {
-    if (!token || !user) {
-      return;
-    }
-
-    const commonRoutes = [
-      "/dashboard",
-      "/numbers",
-      "/wallet",
-      "/otp-history",
-      "/platforms",
-      "/settings",
-    ];
-
-    const adminRoutes = [
-      "/manage",
-      "/manage/numbers",
-      "/manage/platform-status",
-      "/manage/failure-logs",
-      "/manage/users",
-      "/manage/transactions",
-      "/manage/otp-logs",
-      "/manage/logs",
-      "/manage/settings",
-    ];
-
-    const routes = user.role === "ADMIN" ? [...commonRoutes, ...adminRoutes] : commonRoutes;
-
-    for (const route of routes) {
-      router.prefetch(route);
-    }
-  }, [token, user, router]);
-
   useEffect(() => {
     const onUnauthorized = () => {
       logout();
@@ -291,6 +257,7 @@ export function DashboardShell({
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   className={cn(
                     "rounded-lg px-3 py-2 text-sm",
                     pathname === item.href
@@ -307,6 +274,7 @@ export function DashboardShell({
                     <Link
                       key={item.href}
                       href={item.href}
+                      prefetch={false}
                       className={cn(
                         "rounded-lg px-3 py-2 text-sm",
                         pathname === item.href || pathname.startsWith(`${item.href}/`)
@@ -388,6 +356,7 @@ function SidebarLink({
   return (
     <Link
       href={href}
+      prefetch={false}
       className={cn(
         "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
         active
