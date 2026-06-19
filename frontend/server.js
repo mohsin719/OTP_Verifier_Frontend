@@ -1,34 +1,20 @@
 /**
- * Hostinger Node.js entry file.
- * hPanel → Application startup file: server.js
+ * Hostinger startup file (set in hPanel).
+ * Do NOT run build here — build runs in deploy step only.
  */
 const { existsSync } = require("fs");
-const { execSync } = require("child_process");
-const { createServer } = require("http");
-const { parse } = require("url");
-const next = require("next");
+const path = require("path");
 
-if (!existsSync(".next/BUILD_ID")) {
-  console.log("[server] .next missing — running build...");
-  execSync("npm run build", { stdio: "inherit" });
+const standaloneServer = path.join(__dirname, ".next", "standalone", "server.js");
+
+if (!existsSync(standaloneServer)) {
+  console.error(
+    "[server] .next/standalone/server.js not found. Deploy build step must run: npm run build",
+  );
+  process.exit(1);
 }
 
-const port = Number(process.env.PORT || 3000);
-const hostname = process.env.HOSTNAME || "0.0.0.0";
-const app = next({ dev: false, hostname, port });
-const handle = app.getRequestHandler();
+process.env.HOSTNAME = process.env.HOSTNAME || "0.0.0.0";
+process.env.PORT = process.env.PORT || "3000";
 
-app
-  .prepare()
-  .then(() => {
-    createServer((req, res) => {
-      const parsedUrl = parse(req.url, true);
-      handle(req, res, parsedUrl);
-    }).listen(port, hostname, () => {
-      console.log(`VerifySMS frontend ready on http://${hostname}:${port}`);
-    });
-  })
-  .catch((err) => {
-    console.error("Failed to start Next.js:", err);
-    process.exit(1);
-  });
+require(standaloneServer);
