@@ -1,9 +1,8 @@
-import path from "path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
-  outputFileTracingRoot: path.join(process.cwd(), ".."),
+  // Hostinger: use `next start` (not standalone) so CSS/JS static files
+  // stay in .next/static automatically — no manual folder copy needed.
   onDemandEntries: {
     maxInactiveAge: 25 * 1000,
     pagesBufferLength: 2,
