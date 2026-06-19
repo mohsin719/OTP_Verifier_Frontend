@@ -34,6 +34,10 @@ export const metadata: Metadata = {
     title: "VerifySMS",
     description: "Virtual US numbers and realtime OTP verification.",
   },
+  icons: {
+    icon: "/next.svg",
+    shortcut: "/next.svg",
+  },
 };
 
 export default function RootLayout({

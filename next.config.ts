@@ -24,6 +24,11 @@ const nextConfig: NextConfig = {
       { source: "/manage/:path*", destination: "/admin/:path*" },
     ];
   },
+  async redirects() {
+    return [
+      { source: "/favicon.ico", destination: "/next.svg", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;
