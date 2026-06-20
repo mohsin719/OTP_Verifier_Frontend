@@ -14,8 +14,10 @@ type AuthState = {
   token: string | null;
   user: AuthUser | null;
   hydrated: boolean;
+  /** Blocks cookie-based auto-login after explicit logout */
+  sessionRevoked: boolean;
   setAuth: (token: string, user: AuthUser) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
   restoreSession: () => Promise<boolean>;
   setHydrated: (value: boolean) => void;
@@ -63,12 +65,16 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       hydrated: false,
-      setAuth: (token, user) => set({ token, user }),
-      logout: () => {
-        void authLogout().catch(() => {
-          // still clear local session if API unreachable
-        });
-        set({ token: null, user: null });
+      sessionRevoked: false,
+      setAuth: (token, user) => set({ token, user, sessionRevoked: false }),
+      logout: async () => {
+        const accessToken = get().token;
+        set({ sessionRevoked: true, token: null, user: null });
+        try {
+          await authLogout(accessToken);
+        } catch {
+          // local session already cleared; cookie clear is best-effort
+        }
       },
       setHydrated: (value) => set({ hydrated: value }),
       refreshToken: async () => {
@@ -80,6 +86,10 @@ export const useAuthStore = create<AuthState>()(
         return true;
       },
       restoreSession: async () => {
+        if (get().sessionRevoked) {
+          return false;
+        }
+
         const { token, user } = get();
         if (token && user) {
           const refreshed = await refreshWithRetries();
@@ -101,7 +111,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "vsms-auth",
-      partialize: (state) => ({ token: state.token, user: state.user }),
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        sessionRevoked: state.sessionRevoked,
+      }),
       storage: createJSONStorage(() => localStorage),
       onRehydrateStorage: () => (state) => {
         state?.setHydrated(true);

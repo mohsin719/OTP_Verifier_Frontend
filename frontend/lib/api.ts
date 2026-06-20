@@ -23,6 +23,7 @@ async function persistRefreshedSession(
   if (typeof window === 'undefined') return;
   const { useAuthStore } = await import('@/stores/auth-store');
   const state = useAuthStore.getState();
+  if (state.sessionRevoked) return;
   if (!user && !state.user) return;
   state.setAuth(accessToken, user ?? state.user!);
 }
@@ -367,12 +368,13 @@ export async function authRefresh(): Promise<
   };
 }
 
-export async function authLogout(): Promise<
-  ApiResult<{ success: true; message: string }>
-> {
+export async function authLogout(
+  accessToken?: string | null,
+): Promise<ApiResult<{ success: true; message: string }>> {
   return apiFetch<{ success: true; message: string }>('/api/auth/logout', {
     method: 'POST',
     skipAuthRefresh: true,
+    accessToken,
   });
 }
 

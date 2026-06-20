@@ -83,8 +83,10 @@ export default function SettingsPage(): React.ReactElement {
   }
 
   function handleLogout(): void {
-    logout();
-    router.replace("/login");
+    void (async () => {
+      await logout();
+      router.replace("/login");
+    })();
   }
 
   async function handleSendOtp(): Promise<void> {
