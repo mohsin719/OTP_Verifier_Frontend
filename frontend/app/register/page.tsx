@@ -17,6 +17,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { authRegister, authVerifySignup } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { GuestOnly } from "@/components/auth/guest-only";
 
 function isValidPasswordFormat(value: string): boolean {
   if (value.length < 8) return false;
@@ -33,7 +34,7 @@ export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [preferredPlatform, setPreferredPlatform] = useState("Facebook");
+  const [preferredPlatform, setPreferredPlatform] = useState("");
   const [pending, setPending] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
@@ -45,6 +46,11 @@ export default function RegisterPage() {
 
     if (!isValidPasswordFormat(password)) {
       toast.error("Invalid password format. Please check the requirements and try again.");
+      return;
+    }
+
+    if (!preferredPlatform) {
+      toast.error("Please select an OTP platform.");
       return;
     }
 
@@ -80,6 +86,7 @@ export default function RegisterPage() {
   }
 
   return (
+    <GuestOnly>
     <div className="flex min-h-screen w-full min-w-0 items-center justify-center overflow-x-hidden p-4">
       <Card className="w-full max-w-md border-border/80">
         <CardHeader>
@@ -135,10 +142,19 @@ export default function RegisterPage() {
                   value={preferredPlatform}
                   onChange={(ev) => setPreferredPlatform(ev.target.value)}
                   required
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={`flex h-10 w-full rounded-lg border border-input bg-secondary/40 px-3 py-2 text-sm text-foreground ring-offset-background transition-colors focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    preferredPlatform ? "" : "text-muted-foreground"
+                  }`}
                 >
+                  <option value="" disabled>
+                    Select platform
+                  </option>
                   {platformOptions.map((platform) => (
-                    <option key={platform} value={platform}>
+                    <option
+                      key={platform}
+                      value={platform}
+                      className="bg-background text-foreground"
+                    >
                       {platform}
                     </option>
                   ))}
@@ -190,5 +206,6 @@ export default function RegisterPage() {
         </CardContent>
       </Card>
     </div>
+    </GuestOnly>
   );
 }

@@ -73,7 +73,7 @@ export function MobileDashboardNavbar({
   onToggleMenu: () => void;
 }): ReactElement {
   return (
-    <header className="mobile-nav sticky top-0 z-30 flex md:hidden">
+    <header className="mobile-nav flex md:hidden">
       <Link href={href} prefetch={false} className="mobile-nav__brand">
         <span className="mobile-nav__logo">
           <Image

@@ -367,9 +367,7 @@ body {
 /* ─── Mobile top navbar ─── */
 
 .mobile-nav {
-  position: sticky;
-  top: 0;
-  z-index: 30;
+  z-index: 40;
   height: 4rem;
   align-items: center;
   justify-content: space-between;
@@ -383,7 +381,26 @@ body {
 
 @media (max-width: 767px) {
   .mobile-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
     display: flex;
+  }
+
+  .mobile-dashboard-main {
+    padding-top: calc(4rem + env(safe-area-inset-top, 0));
+  }
+
+  .mobile-menu-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: calc(4rem + env(safe-area-inset-top, 0));
+    z-index: 39;
+    max-height: calc(100dvh - 4rem - env(safe-area-inset-top, 0));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
@@ -599,6 +616,90 @@ body {
   gap: 0.45rem;
   padding-top: 0.45rem;
   border-top: 1px solid rgb(255 255 255 / 0.07);
+}
+
+/* Mobile menu: lighter GPU paint (fixes glitch/static on slow/low-end phones) */
+@media (max-width: 767px) {
+  .mobile-nav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #050816;
+  }
+
+  .mobile-menu-panel__surface {
+    isolation: isolate;
+    contain: layout paint;
+    background: #080c1c;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  }
+
+  .mobile-menu-panel--open {
+    animation: mobile-menu-fade-in 0.18s ease-out;
+  }
+
+  @keyframes mobile-menu-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .mobile-menu-panel .premium-sidebar__nav-item--active,
+  .mobile-menu-panel .premium-sidebar__nav-item[data-active="true"] {
+    background: rgb(56 189 248 / 0.14);
+    box-shadow: inset 3px 0 0 var(--ps-glow);
+  }
+
+  .mobile-menu-panel .premium-sidebar__nav-item--active .premium-sidebar__icon-box,
+  .mobile-menu-panel .premium-sidebar__nav-item[data-active="true"] .premium-sidebar__icon-box {
+    box-shadow: none;
+  }
+
+  .mobile-menu-panel .premium-sidebar__wallet {
+    overflow: visible;
+    background: #0c1224;
+    border: 1px solid rgb(56 189 248 / 0.22);
+  }
+
+  .mobile-menu-panel .premium-sidebar__wallet::before {
+    display: none;
+  }
+
+  .mobile-menu-panel .premium-sidebar__wallet-deco {
+    display: none;
+  }
+
+  .mobile-menu-panel .premium-sidebar__wallet-icon-sphere {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(15 23 42 / 0.95);
+    box-shadow: none;
+  }
+
+  .mobile-menu-panel .premium-sidebar__profile {
+    background: rgb(15 23 42 / 0.85);
+  }
+
+  .mobile-menu-panel .premium-sidebar__profile:hover {
+    box-shadow: none;
+  }
+
+  .mobile-menu-panel .premium-sidebar__online {
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  .mobile-menu-panel--open {
+    animation: none;
+  }
+
+  .mobile-menu-panel .animate-pulse {
+    animation: none;
+    opacity: 0.7;
+  }
 }
 
 .premium-sidebar__logo-ring {

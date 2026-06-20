@@ -38,31 +38,44 @@ export async function refreshAccessToken(): Promise<RefreshResult> {
   refreshInFlight = (async (): Promise<RefreshResult> => {
     try {
       const { apiUrl } = getPublicEnv();
-      const refreshRes = await fetch(joinApiUrl(apiUrl, '/api/auth/refresh'), {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const refreshJson: unknown = await refreshRes.json().catch(() => null);
+      const url = joinApiUrl(apiUrl, '/api/auth/refresh');
 
-      if (!refreshRes.ok) {
-        return null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const refreshRes = await fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          const refreshJson: unknown = await refreshRes.json().catch(() => null);
+
+          if (!refreshRes.ok) {
+            if (refreshRes.status === 401) {
+              return null;
+            }
+            throw new Error(`Refresh failed (${refreshRes.status})`);
+          }
+
+          const parsed = parseEnvelope(refreshJson);
+          if (!parsed.ok) {
+            return null;
+          }
+
+          const data = parsed.data as { accessToken: string; user: AuthUser };
+          if (!data?.accessToken || !data?.user) {
+            return null;
+          }
+
+          await persistRefreshedSession(data.accessToken, data.user);
+          return { accessToken: data.accessToken, user: data.user };
+        } catch {
+          if (attempt < 2) {
+            await new Promise((r) => window.setTimeout(r, 700 * (attempt + 1)));
+          }
+        }
       }
 
-      const parsed = parseEnvelope(refreshJson);
-      if (!parsed.ok) {
-        return null;
-      }
-
-      const data = parsed.data as { accessToken: string; user: AuthUser };
-      if (!data?.accessToken || !data?.user) {
-        return null;
-      }
-
-      await persistRefreshedSession(data.accessToken, data.user);
-      return { accessToken: data.accessToken, user: data.user };
-    } catch {
       return null;
     } finally {
       refreshInFlight = null;
@@ -220,8 +233,6 @@ export async function apiFetch<T>(
 
             window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
           }
-
-          // Never retry on 4xx errors (auth/validation)
           if (res.status >= 400 && res.status < 500) {
             if (res.status === 429) {
               return {

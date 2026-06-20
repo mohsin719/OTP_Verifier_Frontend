@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, memo } from "react";
-import { Copy, Phone, RefreshCw, ShieldCheck, Clock, Wifi, X, Info } from "lucide-react";
+import { Copy, Phone, RefreshCw, ShieldCheck, Clock, Wifi, Info } from "lucide-react";
 import { toast } from "sonner";
 import { io, type Socket } from "socket.io-client";
 import { Button } from "@/components/ui/button";
@@ -93,8 +93,8 @@ function NumbersPage() {
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [loadingChangeNumber, setLoadingChangeNumber] = useState(false);
   const [expectedOtpLength] = useState(6);
-  const [showPostOtpWarningDialog, setShowPostOtpWarningDialog] = useState(false);
-  const [pendingPostOtpAction, setPendingPostOtpAction] = useState<"change" | "cancel" | null>(null);
+  const [showChangeNumberDialog, setShowChangeNumberDialog] = useState(false);
+  const [showPostOtpChangeDialog, setShowPostOtpChangeDialog] = useState(false);
   const [showRechargePopup, setShowRechargePopup] = useState(false);
   const [rechargeServicePrice, setRechargeServicePrice] = useState<number | undefined>(undefined);
   const [rechargeDescription, setRechargeDescription] = useState<string | undefined>(undefined);
@@ -449,33 +449,22 @@ function NumbersPage() {
     }
   }, [token, refresh, invalidateWallet]);
 
-  const [showChangeNumberDialog, setShowChangeNumberDialog] = useState(false);
+  const displayOtp = active?.parsedOtp ?? polledOtp;
+  const hasReceivedOtp =
+    active?.otpStatus === "RECEIVED" || Boolean(displayOtp);
+
+  const handleRefundOnly = useCallback(async () => {
+    setShowChangeNumberDialog(false);
+    await releaseActiveNumber();
+  }, [releaseActiveNumber]);
 
   const handleChangeNumber = useCallback(() => {
-    const received = active?.otpStatus === "RECEIVED" || Boolean(active?.parsedOtp ?? polledOtp);
-    if (received) {
-      setPendingPostOtpAction("change");
-      setShowPostOtpWarningDialog(true);
+    if (hasReceivedOtp) {
+      setShowPostOtpChangeDialog(true);
       return;
     }
     setShowChangeNumberDialog(true);
-  }, [active?.otpStatus, active?.parsedOtp, polledOtp]);
-
-  const handleCancelNumber = useCallback(() => {
-    const received =
-      active?.otpStatus === "RECEIVED" || Boolean(active?.parsedOtp ?? polledOtp);
-    if (received) {
-      setPendingPostOtpAction("cancel");
-      setShowPostOtpWarningDialog(true);
-      return;
-    }
-    void releaseActiveNumber();
-  }, [
-    active?.otpStatus,
-    active?.parsedOtp,
-    polledOtp,
-    releaseActiveNumber,
-  ]);
+  }, [hasReceivedOtp]);
 
   const confirmChangeNumber = useCallback(async () => {
     if (!token) return;
@@ -487,6 +476,7 @@ function NumbersPage() {
     }
 
     setShowChangeNumberDialog(false);
+    setShowPostOtpChangeDialog(false);
     setLoadingChangeNumber(true);
     toast.info("Changing number... Please wait 2-3 seconds");
     
@@ -528,16 +518,10 @@ function NumbersPage() {
     }
   }, [token, serviceType, invalidateWallet, servicePrice, checkBalanceRequirement, openRechargePopup]);
 
-  const confirmPostOtpAction = useCallback(async () => {
-    setShowPostOtpWarningDialog(false);
-    if (pendingPostOtpAction === "change") {
-      await confirmChangeNumber();
-      return;
-    }
-    if (pendingPostOtpAction === "cancel") {
-      await releaseActiveNumber();
-    }
-  }, [pendingPostOtpAction, confirmChangeNumber, releaseActiveNumber]);
+  const confirmPostOtpChange = useCallback(async () => {
+    setShowPostOtpChangeDialog(false);
+    await confirmChangeNumber();
+  }, [confirmChangeNumber]);
 
   const statusColor = {
     PENDING: "bg-amber-500/15 text-amber-400 border-amber-500/30",
@@ -550,8 +534,6 @@ function NumbersPage() {
     countdown > 300 ? "text-emerald-400" :
     countdown > 60  ? "text-amber-400"   :
                       "text-red-400";
-  const displayOtp = active?.parsedOtp ?? polledOtp;
-  const hasReceivedOtp = active?.otpStatus === "RECEIVED" || Boolean(displayOtp);
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-2xl space-y-6">
@@ -708,6 +690,7 @@ function NumbersPage() {
                   </div>
                 )}
 
+              {(active.otpStatus === "PENDING" || hasReceivedOtp) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -720,22 +703,12 @@ function NumbersPage() {
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                {loadingChangeNumber ? "Changing..." : "Refund / Change Number"}
+                {loadingChangeNumber
+                  ? "Changing..."
+                  : hasReceivedOtp
+                    ? "Change Number"
+                    : "Refund / Change Number"}
               </Button>
-
-              {hasReceivedOtp && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCancelNumber}
-                    className="gap-2 flex-1 border-border/50"
-                    disabled={loadingRefresh}
-                  >
-                    <X className="h-4 w-4" />
-                    Cancel
-                  </Button>
-                </div>
               )}
               </div>
 
@@ -818,56 +791,52 @@ function NumbersPage() {
         description={rechargeDescription}
       />
 
-      {/* Change Number Confirmation Dialog */}
+      {/* Pre-OTP: refund or change */}
       <Dialog open={showChangeNumberDialog} onOpenChange={setShowChangeNumberDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Refund / Change Number</DialogTitle>
             <DialogDescription>
-              Do you want to purchase another number?
+              OTP abhi receive nahi hui. Wallet refund le kar number cancel karein, ya naya
+              number assign karwayein.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col gap-2 pt-2 sm:flex-row">
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => setShowChangeNumberDialog(false)}
+              onClick={() => void handleRefundOnly()}
+              disabled={loadingRefresh}
             >
-              No
+              {loadingRefresh ? "Processing…" : "Get Refund"}
             </Button>
-            <Button
-              variant="destructive"
-              className="flex-1"
-              onClick={confirmChangeNumber}
-            >
-              Yes
+            <Button className="flex-1" onClick={() => void confirmChangeNumber()}>
+              Change Number
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showPostOtpWarningDialog} onOpenChange={setShowPostOtpWarningDialog}>
+      {/* Post-OTP: change only (no refund) */}
+      <Dialog open={showPostOtpChangeDialog} onOpenChange={setShowPostOtpChangeDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Important</DialogTitle>
+            <DialogTitle>Change Number</DialogTitle>
             <DialogDescription>
-              Changing this number will cost extra charges and canceling will release the active number.
+              OTP receive ho chuki hai — refund available nahi. Naya number lene par Rs{" "}
+              {servicePrice} charge hoga.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 pt-2">
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => setShowPostOtpWarningDialog(false)}
+              onClick={() => setShowPostOtpChangeDialog(false)}
             >
-              No
+              Cancel
             </Button>
-            <Button
-              variant="destructive"
-              className="flex-1"
-              onClick={() => void confirmPostOtpAction()}
-            >
-              Yes
+            <Button className="flex-1" onClick={() => void confirmPostOtpChange()}>
+              Change Number
             </Button>
           </div>
         </DialogContent>

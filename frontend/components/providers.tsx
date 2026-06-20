@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { GlobalLoader } from "@/components/ui/global-loader";
+import { SessionKeeper } from "@/components/auth/session-keeper";
 
 export function Providers({
   children,
@@ -16,6 +17,7 @@ export function Providers({
       <Suspense fallback={null}>
         <GlobalLoader />
       </Suspense>
+      <SessionKeeper />
       {children}
       <Toaster
         richColors

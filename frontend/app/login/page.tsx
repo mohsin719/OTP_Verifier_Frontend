@@ -18,6 +18,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { authLogin } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { GuestOnly } from "@/components/auth/guest-only";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,6 +43,7 @@ export default function LoginPage() {
   }
 
   return (
+    <GuestOnly>
     <div className="flex min-h-screen w-full min-w-0 items-center justify-center overflow-x-hidden p-4">
       <Card className="w-full max-w-md border-border/80">
         <CardHeader>
@@ -102,5 +104,6 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+    </GuestOnly>
   );
 }

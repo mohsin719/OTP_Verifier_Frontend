@@ -28,7 +28,6 @@ import { isNavActive } from "@/lib/nav-utils";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
-import { toast } from "sonner";
 
 const WALLET_CACHE_TTL_MS = 30_000;
 
@@ -62,11 +61,27 @@ export function DashboardShell({
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { token, user, hydrated, setAuth, logout } = useAuthStore();
+  const { token, user, hydrated, setAuth } = useAuthStore();
   const { balancePkr, lastFetchedAt, setBalance, setLoading } = useWalletStore();
+  const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
-    if (!token || !user) return;
+    if (!hydrated) return;
+    void (async () => {
+      await useAuthStore.getState().restoreSession();
+      setSessionReady(true);
+    })();
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !sessionReady) return;
+    if (!useAuthStore.getState().token) {
+      router.replace("/login");
+    }
+  }, [hydrated, sessionReady, router]);
+
+  useEffect(() => {
+    if (!sessionReady || !token || !user) return;
 
     const now = Date.now();
     if (lastFetchedAt && now - lastFetchedAt < WALLET_CACHE_TTL_MS) return;
@@ -108,21 +123,7 @@ export function DashboardShell({
         setLoading(false);
       }
     })();
-  }, [token, user, lastFetchedAt, setBalance, setLoading]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    if (!token) router.replace("/login");
-  }, [hydrated, token, router]);
-
-  useEffect(() => {
-    if (!token) return;
-    const intervalId = window.setInterval(
-      () => void useAuthStore.getState().refreshToken(),
-      10 * 60 * 1000,
-    );
-    return () => window.clearInterval(intervalId);
-  }, [token]);
+  }, [sessionReady, token, user, lastFetchedAt, setBalance, setLoading]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -139,7 +140,7 @@ export function DashboardShell({
   }, []);
 
   useEffect(() => {
-    if (!token || !user) return;
+    if (!sessionReady || !token || !user) return;
     void (async () => {
       try {
         const me = await apiFetch<typeof user>("/api/auth/me", {
@@ -147,11 +148,7 @@ export function DashboardShell({
           cacheTtlMs: 3000,
         });
         if (!me.success) {
-          const refreshed = await useAuthStore.getState().refreshToken();
-          if (!refreshed) {
-            logout();
-            router.replace("/login");
-          }
+          await useAuthStore.getState().refreshToken();
           return;
         }
         if (me.data.role !== user.role || me.data.publicId !== user.publicId) {
@@ -161,24 +158,15 @@ export function DashboardShell({
         console.error("Failed to fetch user:", error);
       }
     })();
-  }, [token, user, setAuth, logout, router]);
+  }, [sessionReady, token, user, setAuth]);
 
   useEffect(() => {
-    let handlingUnauthorized = false;
-    const onUnauthorized = async () => {
-      if (handlingUnauthorized) return;
-      handlingUnauthorized = true;
-      const refreshed = await useAuthStore.getState().refreshToken();
-      if (!refreshed) {
-        logout();
-        toast.info("Session expired. Please login again.");
-        router.replace("/login");
-      }
-      handlingUnauthorized = false;
+    const onUnauthorized = () => {
+      void useAuthStore.getState().restoreSession();
     };
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
-  }, [logout, router]);
+  }, []);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -189,7 +177,7 @@ export function DashboardShell({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mobileMenuOpen]);
 
-  if (!hydrated || !token || !user) {
+  if (!hydrated || !sessionReady || !token || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Checking session…</p>
@@ -232,7 +220,7 @@ export function DashboardShell({
         profileActive={isProfileActive}
       />
 
-      <div className="flex min-w-0 w-full flex-1 flex-col md:pl-[280px]">
+      <div className="mobile-dashboard-main flex min-w-0 w-full flex-1 flex-col md:pl-[280px]">
         <MobileDashboardNavbar
           href={headerHref}
           menuOpen={mobileMenuOpen}
