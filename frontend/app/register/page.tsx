@@ -17,7 +17,6 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { authRegister, authVerifySignup } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
-import { BrandLogo } from "@/components/brand/brand-logo";
 
 function isValidPasswordFormat(value: string): boolean {
   if (value.length < 8) return false;
@@ -81,8 +80,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full min-w-0 flex-col items-center justify-center gap-6 overflow-x-hidden p-4">
-      <BrandLogo showText={false} imageClassName="h-16 w-16" />
+    <div className="flex min-h-screen w-full min-w-0 items-center justify-center overflow-x-hidden p-4">
       <Card className="w-full max-w-md border-border/80">
         <CardHeader>
           <CardTitle>{otpSent ? "Verify your email" : "Create account"}</CardTitle>

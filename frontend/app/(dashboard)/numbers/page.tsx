@@ -570,9 +570,9 @@ function NumbersPage() {
       <Card className="border-border/50 shadow-lg overflow-hidden">
         <div className="h-1 w-full bg-linear-to-r from-primary/60 via-primary to-primary/60" />
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-lg">Active Number</CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-start sm:self-auto">
               {active &&
               active.otpStatus !== "EXPIRED" &&
               active.otpStatus !== "FAILED" &&
@@ -607,15 +607,15 @@ function NumbersPage() {
           ) : active ? (
             <>
               {/* Phone Number Display */}
-              <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-4">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div>
+              <div className="rounded-xl border border-border/60 bg-secondary/20 p-3 sm:p-4 space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">US Number</p>
-                    <p className="text-2xl font-bold font-mono tracking-wider text-foreground">
+                    <p className="text-xl sm:text-2xl font-bold font-mono tracking-wide text-foreground break-all">
                       {active.e164}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
                     <Badge
                       className={`text-xs font-semibold border ${
                         statusColor[active.otpStatus] ?? statusColor.PENDING
@@ -636,27 +636,27 @@ function NumbersPage() {
                 </div>
 
                 {/* Countdown Timer */}
-                <div className="flex items-center gap-3 pt-1 border-t border-border/40">
-                  <Clock className={`h-4 w-4 ${timerColor}`} />
+                <div className="flex flex-col gap-2 pt-1 border-t border-border/40 sm:flex-row sm:items-center sm:gap-3">
                   <div className="flex items-center gap-2">
+                    <Clock className={`h-4 w-4 shrink-0 ${timerColor}`} />
                     <span className="text-xs text-muted-foreground">Expires in</span>
                     <span className={`font-mono text-sm font-bold tabular-nums ${timerColor}`}>
                       {formatCountdown(countdown)}
                     </span>
                   </div>
                   {countdown === 0 && (
-                    <span className="text-xs text-red-400 ml-auto">Lease expired</span>
+                    <span className="text-xs text-red-400 sm:ml-auto">Lease expired</span>
                   )}
                 </div>
               </div>
 
               {/* OTP Display */}
-              <div className={`rounded-xl border p-5 transition-all duration-500 ${
+              <div className={`rounded-xl border p-4 sm:p-5 transition-all duration-500 ${
                 otpFlash
                   ? "border-emerald-500/60 bg-emerald-500/10 shadow-[0_0_20px_rgba(34,197,94,0.15)]"
                   : "border-border/60 bg-secondary/10"
               }`}>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between gap-2 mb-3">
                   <p className="text-xs text-muted-foreground uppercase tracking-widest">
                     Received OTP
                   </p>
@@ -665,7 +665,7 @@ function NumbersPage() {
                       size="sm"
                       variant="ghost"
                       onClick={copyOtp}
-                      className="h-6 px-2 text-xs gap-1 hover:bg-emerald-500/10 hover:text-emerald-400"
+                      className="h-6 shrink-0 px-2 text-xs gap-1 hover:bg-emerald-500/10 hover:text-emerald-400"
                     >
                       <Copy className="h-3 w-3" />
                       Copy
@@ -674,34 +674,37 @@ function NumbersPage() {
                 </div>
 
                 {displayOtp ? (
-                  <div className="flex items-center gap-3">
-                    <p className="text-4xl font-bold font-mono tracking-[0.3em] text-emerald-400">
+                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
+                    <p className="text-2xl sm:text-4xl font-bold font-mono tracking-[0.15em] sm:tracking-[0.3em] text-emerald-400 break-all text-center sm:text-left">
                       {displayOtp}
                     </p>
-                    <ShieldCheck className="h-6 w-6 text-emerald-500" />
+                    <ShieldCheck className="h-6 w-6 shrink-0 text-emerald-500" />
                   </div>
                 ) : (
-                  <div className="flex items-center gap-3">
-                    <div className="flex gap-2">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex justify-center gap-1.5 sm:justify-start sm:gap-2">
                       {[...Array(6)].map((_, i) => (
                         <div
                           key={i}
-                          className="h-9 w-7 rounded-md border border-border/50 bg-secondary/30 animate-pulse"
+                          className="h-8 w-7 sm:h-9 sm:w-8 rounded-md border border-border/50 bg-secondary/30 animate-pulse"
                           style={{ animationDelay: `${i * 100}ms` }}
                         />
                       ))}
                     </div>
                     {active.otpStatus === "PENDING" && (
-                    <div className="text-xs text-muted-foreground ml-2 space-y-1">
-                      <p>
-                        Awaiting {expectedOtpLength}-digit SMS… ({userPlatform || 'generic'})
-                      </p>
-                      <p className="text-amber-400/80 flex items-center gap-1">
-                        <Info className="h-3 w-3" />
-                        If you do not receive the OTP within 30–60 seconds, please trigger &apos;Resend OTP&apos; directly from that particular platform.
-                      </p>
-                    </div>
-                  )}
+                      <div className="min-w-0 space-y-1.5 text-center text-xs text-muted-foreground sm:text-left">
+                        <p>
+                          Awaiting {expectedOtpLength}-digit SMS… ({userPlatform || "generic"})
+                        </p>
+                        <p className="text-amber-400/80 flex items-start justify-center gap-1 sm:justify-start">
+                          <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                          <span>
+                            If you do not receive the OTP within 30–60 seconds, please trigger
+                            &apos;Resend OTP&apos; directly from that particular platform.
+                          </span>
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -709,7 +712,7 @@ function NumbersPage() {
                 variant="outline"
                 size="sm"
                 onClick={handleChangeNumber}
-                className="gap-2 w-full border-border/50"
+                className="mt-4 gap-2 w-full border-border/50"
                 disabled={loadingChangeNumber}
               >
                 {loadingChangeNumber ? (
@@ -796,11 +799,12 @@ function NumbersPage() {
           <p className="text-sm font-medium text-foreground">
             Service Charge: Rs {servicePrice} per OTP
           </p>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside pl-0.5">
             <li>Click <strong className="text-foreground">Get US Number</strong> to lease a temporary number</li>
-            <li>Use the number on any website that requires SMS verification</li>
-            <li>Your OTP code appears automatically within seconds</li>
-            <li>The number returns to the pool after the lease expires (30 min)</li>
+            <li>Copy the number and paste it on Facebook / your platform&apos;s signup page</li>
+            <li>OTP automatically appears here when SMS arrives — no typing needed</li>
+            <li>Click <strong className="text-foreground">Copy</strong> and paste the code on the platform</li>
+            <li>Number returns to pool after lease expires (~30 min)</li>
           </ol>
         </CardContent>
       </Card>
