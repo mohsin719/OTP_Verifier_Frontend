@@ -19,16 +19,18 @@ export default function DashboardPage(): React.ReactElement {
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard Overview</h1>
-        <p className="text-muted-foreground mt-1">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold tracking-tight break-words sm:text-3xl">
+          Dashboard Overview
+        </h1>
+        <p className="mt-1 break-words text-muted-foreground">
           Welcome back. You are authenticated securely as{" "}
           <span className="font-medium text-foreground">{user?.publicId}</span>
         </p>
       </div>
       
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid w-full min-w-0 gap-6 sm:grid-cols-2">
         <Card className="border-border/50 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Available Balance</CardTitle>
@@ -46,7 +48,7 @@ export default function DashboardPage(): React.ReactElement {
                 </span>
               </div>
             )}
-            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+            <p className="mt-3 flex items-center gap-1.5 break-words text-xs text-muted-foreground">
               <Shield className="h-3.5 w-3.5 text-green-500" />
               Funds are secure and ready for immediate deployment
             </p>
@@ -64,7 +66,7 @@ export default function DashboardPage(): React.ReactElement {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 relative z-10">
-            <p className="text-sm text-muted-foreground leading-relaxed">
+            <p className="text-sm leading-relaxed break-words text-muted-foreground">
               Select a target service platform to securely allocate a dedicated, temporary virtual number for one-time password (OTP) verification.
             </p>
             <Button asChild className="w-full sm:w-auto shadow-md transition-all hover:shadow-lg">
@@ -74,7 +76,7 @@ export default function DashboardPage(): React.ReactElement {
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid w-full min-w-0 gap-6 md:grid-cols-2">
         <Card className="border-border/50 shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">

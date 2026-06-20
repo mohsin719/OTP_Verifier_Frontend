@@ -252,7 +252,7 @@ export default function AdminUsersPage(): React.ReactElement {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Users</h1>
         <p className="text-muted-foreground">Manage user accounts and balances.</p>
@@ -263,7 +263,7 @@ export default function AdminUsersPage(): React.ReactElement {
           <CardTitle>Admin Wallet Actions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid w-full min-w-0 gap-4 lg:grid-cols-2">
             <div className="space-y-3 rounded-lg border border-border/70 p-4">
               <h3 className="font-medium">Increase my balance</h3>
               <Input

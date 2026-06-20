@@ -87,6 +87,7 @@ function NumbersPage() {
   const [countdown, setCountdown] = useState(0);
   const [otpFlash, setOtpFlash] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
+  const [wsUnavailable, setWsUnavailable] = useState(false);
   const [polledOtp, setPolledOtp] = useState<string | null>(null);
   const [optimisticActive, setOptimisticActive] = useState<ActiveNumber | null>(null);
   const [loadingRefresh, setLoadingRefresh] = useState(false);
@@ -142,18 +143,51 @@ function NumbersPage() {
     return () => clearInterval(tick);
   }, [active?.leasedUntil, refresh]);
 
-  // WebSocket for real-time OTP push
+  // WebSocket for real-time OTP push — only while actively waiting for OTP
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setWsConnected(false);
+      setWsUnavailable(false);
+      return;
+    }
+
+    const awaitingOtp =
+      active?.otpStatus !== "EXPIRED" &&
+      active?.otpStatus !== "FAILED" &&
+      !active?.parsedOtp &&
+      !polledOtp &&
+      Boolean(active?.e164);
+
+    if (!awaitingOtp) {
+      setWsConnected(false);
+      setWsUnavailable(false);
+      return;
+    }
+
     const endpoint = wsUrl ? `${wsUrl}/otp` : "/otp";
     const socket: Socket = io(endpoint, {
       auth: { token },
-      transports: ["polling", "websocket"],
-      upgrade: true,
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 4,
+      reconnectionDelay: 1500,
+      reconnectionDelayMax: 8000,
+      timeout: 8000,
     });
-    socket.on("connect", () => setWsConnected(true));
-    socket.on("disconnect", () => setWsConnected(false));
-    socket.on("otp:received", (payload?: { otp?: string }) => {
+
+    const onConnect = () => {
+      setWsConnected(true);
+      setWsUnavailable(false);
+    };
+    const onDisconnect = () => setWsConnected(false);
+    const onConnectError = () => {
+      setWsConnected(false);
+    };
+    const onReconnectFailed = () => {
+      setWsConnected(false);
+      setWsUnavailable(true);
+    };
+    const onOtpReceived = (payload?: { otp?: string }) => {
       if (payload?.otp) {
         setPolledOtp(payload.otp);
       }
@@ -161,16 +195,38 @@ function NumbersPage() {
       setOtpFlash(true);
       setTimeout(() => setOtpFlash(false), 2500);
       toast.success("OTP received!", { duration: 4000 });
-    });
-    return () => { socket.disconnect(); };
-  }, [token, wsUrl, refresh]);
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on("connect_error", onConnectError);
+    socket.io.on("reconnect_failed", onReconnectFailed);
+    socket.on("otp:received", onOtpReceived);
+
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.off("connect_error", onConnectError);
+      socket.io.off("reconnect_failed", onReconnectFailed);
+      socket.off("otp:received", onOtpReceived);
+      socket.disconnect();
+      setWsConnected(false);
+    };
+  }, [
+    token,
+    wsUrl,
+    refresh,
+    active?.e164,
+    active?.otpStatus,
+    active?.parsedOtp,
+    polledOtp,
+  ]);
 
   // Fast-poll fallback: keep polling while pending so first OTP is never missed,
   // even if socket room handoff races with initial webhook emit.
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const [pollStartTime, setPollStartTime] = useState<number | null>(null);
-  
+
   useEffect(() => {
     const awaitingOtp =
       active?.otpStatus !== "EXPIRED" &&
@@ -180,18 +236,15 @@ function NumbersPage() {
 
     if (!active?.e164 || !token || !awaitingOtp) {
       if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
-      setPollStartTime(null);
       return;
     }
     const e164 = active.e164;
-    if (!pollStartTime) {
-      setPollStartTime(Date.now());
-    }
-    
+
     const doPoll = async () => {
       // Cancel previous request if still pending
       if (abortControllerRef.current) {
@@ -225,13 +278,13 @@ function NumbersPage() {
     pollRef.current = setInterval(() => void doPoll(), 3000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
-      setPollStartTime(null);
     };
-  }, [active?.e164, active?.otpStatus, active?.parsedOtp, polledOtp, token, refresh, pollStartTime]);
+  }, [active?.e164, active?.otpStatus, active?.parsedOtp, polledOtp, token, refresh]);
 
   const invalidateWallet = useWalletStore((s) => s.invalidate);
 
@@ -369,7 +422,7 @@ function NumbersPage() {
         refunded?: boolean;
         refundAmountPkr?: number | null;
       }>("/api/numbers/release", {
-        method: "DELETE",
+        method: "POST",
         accessToken: token,
       });
       
@@ -501,11 +554,11 @@ function NumbersPage() {
   const hasReceivedOtp = active?.otpStatus === "RECEIVED" || Boolean(displayOtp);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto w-full min-w-0 max-w-2xl space-y-6">
       {/* Header */}
       <div className="space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-          <Phone className="h-7 w-7 text-primary" />
+        <h1 className="flex flex-wrap items-center gap-2 font-bold tracking-tight sm:gap-3">
+          <Phone className="h-6 w-6 shrink-0 text-primary sm:h-7 sm:w-7" />
           Virtual US Number
         </h1>
         <p className="text-muted-foreground">
@@ -520,15 +573,24 @@ function NumbersPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Active Number</CardTitle>
             <div className="flex items-center gap-2">
-              {/* WebSocket connection indicator */}
-              <div className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full border ${
-                wsConnected
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                  : "bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
-              }`}>
-                <Wifi className="h-3 w-3" />
-                {wsConnected ? "Live" : "Connecting"}
-              </div>
+              {active &&
+              active.otpStatus !== "EXPIRED" &&
+              active.otpStatus !== "FAILED" &&
+              !active.parsedOtp &&
+              !polledOtp ? (
+                <div
+                  className={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium ${
+                    wsConnected
+                      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                      : wsUnavailable
+                        ? "border-amber-500/20 bg-amber-500/10 text-amber-400"
+                        : "border-zinc-500/20 bg-zinc-500/10 text-zinc-500"
+                  }`}
+                >
+                  <Wifi className="h-3 w-3" />
+                  {wsConnected ? "Live" : wsUnavailable ? "Offline" : "Connecting"}
+                </div>
+              ) : null}
             </div>
           </div>
           <CardDescription>

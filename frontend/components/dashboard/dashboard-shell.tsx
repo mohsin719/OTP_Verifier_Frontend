@@ -1,7 +1,6 @@
 "use client";
 
-import type { ComponentType, ReactElement, ReactNode } from "react";
-import Link from "next/link";
+import type { ReactElement, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -10,34 +9,41 @@ import {
   History,
   LayoutDashboard,
   Layers,
-  LogOut,
-  Menu,
-  Phone,
   Settings,
   Shield,
+  Smartphone,
   Wallet,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { RechargePopup } from "@/components/dialogs/recharge-popup";
+import {
+  MobileDashboardNavbar,
+  PremiumSidebarAddBalance,
+  PremiumSidebarNavLink,
+  PremiumSidebarProfile,
+  PremiumSidebarShell,
+  PremiumSidebarWallet,
+} from "@/components/dashboard/premium-sidebar";
 import { apiFetch, AUTH_UNAUTHORIZED_EVENT } from "@/lib/api";
+import { isNavActive } from "@/lib/nav-utils";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
+import { toast } from "sonner";
 
-const WALLET_CACHE_TTL_MS = 30_000; // re-fetch every 30s
+const WALLET_CACHE_TTL_MS = 30_000;
 
 const nav = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/wallet", label: "Wallet", icon: Wallet },
-  { href: "/otp-history", label: "OTP history", icon: History },
-  { href: "/platforms", label: "Platforms", icon: Phone },
-  { href: "/numbers", label: "Get number", icon: Phone },
-  { href: "/settings", label: "Profile", icon: Settings },
+  { href: "/otp-history", label: "OTP History", icon: History },
+  { href: "/platforms", label: "Platforms", icon: Layers },
+  { href: "/numbers", label: "Get Number", icon: Smartphone },
 ];
 
 const adminNav = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/manage", label: "Admin", icon: Shield },
-  { href: "/manage/numbers", label: "Numbers", icon: Phone },
+  { href: "/manage/numbers", label: "Numbers", icon: Smartphone },
   { href: "/manage/platform-status", label: "Platform Status", icon: Layers },
   { href: "/manage/failure-logs", label: "Failure Logs", icon: AlertTriangle },
   { href: "/manage/users", label: "Users", icon: Settings },
@@ -59,42 +65,42 @@ export function DashboardShell({
   const { token, user, hydrated, setAuth, logout } = useAuthStore();
   const { balancePkr, lastFetchedAt, setBalance, setLoading } = useWalletStore();
 
-  // Pre-fetch wallet balance for instant display across all pages
   useEffect(() => {
     if (!token || !user) return;
 
     const now = Date.now();
     if (lastFetchedAt && now - lastFetchedAt < WALLET_CACHE_TTL_MS) return;
 
-    // Show cached balance immediately if available and valid
-    const cached = localStorage.getItem('wallet_balance_cache');
+    const cached = localStorage.getItem("wallet_balance_cache");
     if (cached) {
       try {
-        const { balance, timestamp } = JSON.parse(cached);
+        const { balance, timestamp } = JSON.parse(cached) as {
+          balance: number;
+          timestamp: number;
+        };
         if (now - timestamp < WALLET_CACHE_TTL_MS) {
           setBalance(balance);
           setLoading(false);
           return;
         }
       } catch {
-        // Ignore cache parse errors
+        // ignore
       }
     }
 
     setLoading(true);
     void (async () => {
       try {
-        const res = await apiFetch<{ balancePkr: number }>(
-          "/api/wallet",
-          { accessToken: token, disableDedupe: true },
-        );
+        const res = await apiFetch<{ balancePkr: number }>("/api/wallet", {
+          accessToken: token,
+          disableDedupe: true,
+        });
         if (res.success) {
           setBalance(res.data.balancePkr);
-          // Cache in localStorage with timestamp
-          localStorage.setItem('wallet_balance_cache', 
-            JSON.stringify({ balance: res.data.balancePkr, timestamp: Date.now() }));
-        } else {
-          console.error("Failed to fetch balance:", res.error);
+          localStorage.setItem(
+            "wallet_balance_cache",
+            JSON.stringify({ balance: res.data.balancePkr, timestamp: Date.now() }),
+          );
         }
       } catch (error) {
         console.error("Failed to fetch balance:", error);
@@ -105,18 +111,35 @@ export function DashboardShell({
   }, [token, user, lastFetchedAt, setBalance, setLoading]);
 
   useEffect(() => {
-    if (!hydrated) {
-      return;
-    }
-    if (!token) {
-      router.replace("/login");
-    }
+    if (!hydrated) return;
+    if (!token) router.replace("/login");
   }, [hydrated, token, router]);
 
   useEffect(() => {
-    if (!token || !user) {
-      return;
-    }
+    if (!token) return;
+    const intervalId = window.setInterval(
+      () => void useAuthStore.getState().refreshToken(),
+      10 * 60 * 1000,
+    );
+    return () => window.clearInterval(intervalId);
+  }, [token]);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const closeOnDesktop = () => {
+      if (mq.matches) setMobileMenuOpen(false);
+    };
+    closeOnDesktop();
+    mq.addEventListener("change", closeOnDesktop);
+    return () => mq.removeEventListener("change", closeOnDesktop);
+  }, []);
+
+  useEffect(() => {
+    if (!token || !user) return;
     void (async () => {
       try {
         const me = await apiFetch<typeof user>("/api/auth/me", {
@@ -124,9 +147,11 @@ export function DashboardShell({
           cacheTtlMs: 3000,
         });
         if (!me.success) {
-          console.error("Failed to fetch user:", me.error);
-          logout();
-          router.replace("/login");
+          const refreshed = await useAuthStore.getState().refreshToken();
+          if (!refreshed) {
+            logout();
+            router.replace("/login");
+          }
           return;
         }
         if (me.data.role !== user.role || me.data.publicId !== user.publicId) {
@@ -134,22 +159,35 @@ export function DashboardShell({
         }
       } catch (error) {
         console.error("Failed to fetch user:", error);
-        logout();
-        router.replace("/login");
       }
     })();
   }, [token, user, setAuth, logout, router]);
 
   useEffect(() => {
-    const onUnauthorized = () => {
-      logout();
-      router.replace("/login");
+    let handlingUnauthorized = false;
+    const onUnauthorized = async () => {
+      if (handlingUnauthorized) return;
+      handlingUnauthorized = true;
+      const refreshed = await useAuthStore.getState().refreshToken();
+      if (!refreshed) {
+        logout();
+        toast.info("Session expired. Please login again.");
+        router.replace("/login");
+      }
+      handlingUnauthorized = false;
     };
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
-    return () => {
-      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
-    };
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
   }, [logout, router]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileMenuOpen]);
 
   if (!hydrated || !token || !user) {
     return (
@@ -160,7 +198,9 @@ export function DashboardShell({
   }
 
   const showAdmin = user.role === "ADMIN";
-  const visibleNav = showAdmin ? [] : nav;
+  const profileHref = "/settings";
+  const isProfileActive = isNavActive(pathname, profileHref);
+  const headerHref = showAdmin ? "/manage" : "/dashboard";
 
   const pkrFormatter = new Intl.NumberFormat("en-PK", {
     style: "currency",
@@ -168,170 +208,96 @@ export function DashboardShell({
     maximumFractionDigits: 0,
   });
 
+  const balanceLabel =
+    balancePkr === null
+      ? "—"
+      : `${pkrFormatter.format(balancePkr)} PKR`;
+
+  const visibleNav = showAdmin ? [] : nav;
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-border bg-secondary md:flex">
-        <div className="flex h-16 items-center border-b border-border px-6 text-lg font-semibold">
-          VerifySMS
-        </div>
-        <nav className="flex flex-1 flex-col gap-1 p-3">
-          {visibleNav.map((item) => (
-            <SidebarLink
-              key={item.href}
-              {...item}
-              active={pathname === item.href}
-            />
-          ))}
-          {showAdmin ? (
-            <>
-              <div className="my-2 border-t border-border pt-2 text-xs uppercase text-muted-foreground">
-                Admin
-              </div>
-              {adminNav.map((item) => (
-                <SidebarLink
+    <div className="flex min-h-screen w-full max-w-[100vw] overflow-x-hidden">
+      <PremiumSidebarShell
+        headerHref={headerHref}
+        nav={nav}
+        adminNav={adminNav}
+        showAdmin={showAdmin}
+        pathname={pathname}
+        showWallet={!showAdmin}
+        balanceLabel={balanceLabel}
+        balanceLoading={balancePkr === null}
+        onAddBalance={() => setShowRechargeModal(true)}
+        user={user}
+        profileHref={profileHref}
+        profileActive={isProfileActive}
+      />
+
+      <div className="flex min-w-0 w-full flex-1 flex-col md:pl-[280px]">
+        <MobileDashboardNavbar
+          href={headerHref}
+          menuOpen={mobileMenuOpen}
+          onToggleMenu={() => setMobileMenuOpen((prev) => !prev)}
+        />
+
+        <div
+          className={cn(
+            "mobile-menu-panel md:hidden",
+            mobileMenuOpen ? "mobile-menu-panel--open" : "mobile-menu-panel--closed",
+          )}
+          id="mobile-dashboard-menu"
+          aria-hidden={!mobileMenuOpen}
+        >
+          <div className="mobile-menu-panel__surface">
+            <div className="mobile-menu-panel__inner">
+            <nav className="flex flex-col gap-1">
+              {visibleNav.map((item) => (
+                <PremiumSidebarNavLink
                   key={item.href}
                   {...item}
-                  active={pathname === item.href || pathname.startsWith(`${item.href}/`)}
+                  pathname={pathname}
+                  onNavigate={() => setMobileMenuOpen(false)}
                 />
-              ))}
-            </>
-          ) : null}
-        </nav>
-        <div className="border-t border-border p-3">
-          {!showAdmin && (
-            <div className="mb-2 space-y-2">
-              <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 text-xs">
-                <p className="text-muted-foreground">Balance</p>
-                {balancePkr === null ? (
-                  <div className="mt-1 h-4 w-20 animate-pulse rounded bg-muted" />
-                ) : (
-                  <p className="font-semibold text-foreground tabular-nums">
-                    {pkrFormatter.format(balancePkr)} PKR
-                  </p>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full min-w-0 gap-2 px-2 text-xs sm:px-3 sm:text-sm"
-                onClick={() => setShowRechargeModal(true)}
-              >
-                <Wallet className="h-4 w-4 shrink-0" />
-                <span className="truncate">Add Balance</span>
-              </Button>
-            </div>
-          )}
-          <div className="mb-2 rounded-lg bg-muted/50 px-3 py-2 text-xs">
-            <p className="font-medium">{user.publicId}</p>
-            <p className="truncate text-muted-foreground">{user.email}</p>
-          </div>
-          <Button
-            variant="outline"
-            className="w-full justify-start gap-2"
-            onClick={() => {
-              logout();
-              router.replace("/login");
-            }}
-          >
-            <LogOut className="h-4 w-4" />
-            Log out
-          </Button>
-        </div>
-      </aside>
-      <div className="flex flex-1 flex-col md:pl-60">
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background px-4 md:hidden">
-          <span className="font-semibold">VerifySMS</span>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setMobileMenuOpen((prev) => !prev)}
-            aria-label="Toggle navigation menu"
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
-        </header>
-        {mobileMenuOpen ? (
-          <div className="border-b border-border bg-background px-4 py-3 md:hidden">
-            <nav className="grid gap-2">
-              {visibleNav.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  prefetch={false}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm",
-                    pathname === item.href
-                      ? "bg-primary/15 text-foreground"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                  )}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  {item.label}
-                </Link>
               ))}
               {showAdmin
                 ? adminNav.map((item) => (
-                    <Link
+                    <PremiumSidebarNavLink
                       key={item.href}
-                      href={item.href}
-                      prefetch={false}
-                      className={cn(
-                        "rounded-lg px-3 py-2 text-sm",
-                        pathname === item.href || pathname.startsWith(`${item.href}/`)
-                          ? "bg-primary/15 text-foreground"
-                          : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                      )}
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      {item.label}
-                    </Link>
+                      {...item}
+                      pathname={pathname}
+                      onNavigate={() => setMobileMenuOpen(false)}
+                    />
                   ))
                 : null}
             </nav>
-            {!showAdmin && (
-              <>
-                <div className="my-2 rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 text-xs">
-                  <p className="text-muted-foreground">Balance</p>
-                  {balancePkr === null ? (
-                    <div className="mt-1 h-4 w-20 animate-pulse rounded bg-muted" />
-                  ) : (
-                    <p className="font-semibold text-foreground tabular-nums">
-                      {pkrFormatter.format(balancePkr)} PKR
-                    </p>
-                  )}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full min-w-0 gap-2 px-2 text-xs"
+
+            {!showAdmin ? (
+              <div className="mobile-menu-panel__footer">
+                <PremiumSidebarWallet
+                  balanceLabel={balanceLabel}
+                  loading={balancePkr === null}
+                />
+                <PremiumSidebarAddBalance
                   onClick={() => {
                     setMobileMenuOpen(false);
                     setShowRechargeModal(true);
                   }}
-                >
-                  <Wallet className="h-4 w-4 shrink-0" />
-                  <span className="truncate">Add Balance</span>
-                </Button>
-              </>
-            )}
-            <Button
-              variant="outline"
-              className="mt-3 w-full justify-center gap-2"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                logout();
-                router.replace("/login");
-              }}
-            >
-              <LogOut className="h-4 w-4" />
-              Log out
-            </Button>
+                />
+              </div>
+            ) : null}
+
+            <PremiumSidebarProfile
+              user={user}
+              href={profileHref}
+              active={isProfileActive}
+              onNavigate={() => setMobileMenuOpen(false)}
+            />
+            </div>
           </div>
-        ) : null}
-        <main className="flex-1 p-4 md:p-8">{children}</main>
+        </div>
+
+        <main className="min-w-0 w-full max-w-full flex-1 p-4 sm:p-6 md:p-8">{children}</main>
       </div>
 
-      {/* Recharge Modal */}
       <RechargePopup
         open={showRechargeModal}
         onOpenChange={setShowRechargeModal}
@@ -339,33 +305,5 @@ export function DashboardShell({
         description="A minimum recharge of Rs 500 is required."
       />
     </div>
-  );
-}
-
-function SidebarLink({
-  href,
-  label,
-  icon: Icon,
-  active,
-}: {
-  href: string;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-  active: boolean;
-}): ReactElement {
-  return (
-    <Link
-      href={href}
-      prefetch={false}
-      className={cn(
-        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
-        active
-          ? "bg-primary/15 text-foreground"
-          : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-      )}
-    >
-      <Icon className="h-4 w-4 shrink-0" />
-      {label}
-    </Link>
   );
 }

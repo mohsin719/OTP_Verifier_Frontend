@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono, Outfit } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
@@ -13,31 +13,60 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const outfit = Outfit({
+  variable: "--font-brand",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL || "https://usnumhub.com",
   ),
   title: {
-    default: "VerifySMS — Virtual US numbers & OTP",
-    template: "%s | VerifySMS",
+    default: "US Num Hub — Virtual US numbers & OTP",
+    template: "%s | US Num Hub",
   },
   description:
     "Purchase temporary US phone numbers and receive OTP codes in realtime for verification workflows.",
+  applicationName: "US Num Hub",
+  manifest: "/site.webmanifest",
   openGraph: {
-    title: "VerifySMS — Virtual SMS verification",
+    title: "US Num Hub — Virtual SMS verification",
     description:
       "Secure temporary numbers, wallet billing, and realtime OTP delivery.",
     type: "website",
+    siteName: "US Num Hub",
+    images: [
+      {
+        url: "/android-chrome-512x512.png",
+        width: 512,
+        height: 512,
+        alt: "US Num Hub",
+      },
+    ],
   },
   twitter: {
-    card: "summary_large_image",
-    title: "VerifySMS",
+    card: "summary",
+    title: "US Num Hub",
     description: "Virtual US numbers and realtime OTP verification.",
+    images: ["/android-chrome-512x512.png"],
   },
   icons: {
-    icon: "/next.svg",
-    shortcut: "/next.svg",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+    shortcut: "/favicon.ico",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({
@@ -48,7 +77,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${outfit.variable} min-h-screen antialiased`}
       >
         <Providers>{children}</Providers>
       </body>

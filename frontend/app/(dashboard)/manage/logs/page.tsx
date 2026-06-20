@@ -104,7 +104,7 @@ export default function AdminLogsPage(): React.ReactElement {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Admin Logs</h1>
         <p className="text-muted-foreground">Audit trail of all admin actions.</p>

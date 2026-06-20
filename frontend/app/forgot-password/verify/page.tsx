@@ -106,7 +106,7 @@ export default function ForgotPasswordVerifyPage() {
 
   if (done) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
+      <div className="flex min-h-screen w-full min-w-0 items-center justify-center overflow-x-hidden p-4">
         <Card className="w-full max-w-md border-border/80">
           <CardContent className="pt-8 pb-8">
             <div className="flex flex-col items-center gap-4 text-center">
@@ -125,7 +125,7 @@ export default function ForgotPasswordVerifyPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="flex min-h-screen w-full min-w-0 items-center justify-center overflow-x-hidden p-4">
       <Card className="w-full max-w-md border-border/80">
         <CardHeader>
           <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/30">

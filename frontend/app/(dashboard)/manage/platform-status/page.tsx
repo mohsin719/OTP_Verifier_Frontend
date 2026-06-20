@@ -95,7 +95,7 @@ export default function AdminPlatformStatusPage(): React.ReactElement {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Platform Status</h1>
         <p className="text-muted-foreground">

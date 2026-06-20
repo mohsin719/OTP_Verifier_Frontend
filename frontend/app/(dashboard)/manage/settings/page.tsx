@@ -77,7 +77,7 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-2xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Admin Settings</h1>
         <p className="text-muted-foreground">

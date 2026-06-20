@@ -3,7 +3,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { AuthUser } from "@/lib/auth-types";
-import { toast } from "sonner";
 import { authRefresh } from "@/lib/api";
 
 export type { AuthUser };
@@ -36,6 +35,11 @@ export const useAuthStore = create<AuthState>()(
       logout: () => set({ token: null, user: null }),
       setHydrated: (value) => set({ hydrated: value }),
       refreshToken: async () => {
+        const state = useAuthStore.getState();
+        if (!state.token) {
+          return false;
+        }
+
         try {
           const result = await authRefresh();
           if (result.success && result.data) {
@@ -43,8 +47,7 @@ export const useAuthStore = create<AuthState>()(
             return true;
           }
           return false;
-        } catch (error) {
-          console.error("Token refresh failed:", error);
+        } catch {
           return false;
         }
       },
@@ -59,25 +62,4 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 );
-
-
-
-// Global 401 handler - silent logout with user-friendly toast
-
-if (typeof window !== "undefined") {
-  let isHandlingUnauthorized = false;
-  window.addEventListener("vsms:auth-unauthorized", async () => {
-    if (isHandlingUnauthorized) return;
-    isHandlingUnauthorized = true;
-    const { logout, refreshToken } = useAuthStore.getState();
-    // Try to refresh token first
-    const refreshed = await refreshToken();
-    if (!refreshed) {
-      logout();
-      toast.info("Session expired. Please login again.");
-    }
-    setTimeout(() => { isHandlingUnauthorized = false; }, 3000);
-  });
-
-}
 

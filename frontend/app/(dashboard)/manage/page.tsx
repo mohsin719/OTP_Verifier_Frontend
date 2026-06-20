@@ -75,7 +75,7 @@ export default function AdminDashboardPage() {
       : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-6xl space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -101,7 +101,7 @@ export default function AdminDashboardPage() {
       {isLoading && !stats ? (
         <Skeleton className="h-32 w-full rounded-xl" />
       ) : stats ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid w-full min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Metric
             title="Total Registered Users"
             value={stats.totalUsers}
@@ -125,7 +125,7 @@ export default function AdminDashboardPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid w-full min-w-0 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 border-border/50 shadow-sm">
           <CardHeader>
             <CardTitle>System Analytics Overview</CardTitle>

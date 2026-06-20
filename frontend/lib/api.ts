@@ -9,10 +9,69 @@ type ApiFetchOptions = RequestInit & {
   accessToken?: string | null;
   cacheTtlMs?: number;
   disableDedupe?: boolean;
+  /** Do not attempt token refresh / unauthorized side-effects (login, refresh, etc.) */
+  skipAuthRefresh?: boolean;
 };
 
 const DEFAULT_CACHE_TTL_MS = 4000;
 export const AUTH_UNAUTHORIZED_EVENT = 'vsms:auth-unauthorized';
+
+async function persistRefreshedSession(
+  accessToken: string,
+  user?: AuthUser,
+): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const { useAuthStore } = await import('@/stores/auth-store');
+  const state = useAuthStore.getState();
+  if (!user && !state.user) return;
+  state.setAuth(accessToken, user ?? state.user!);
+}
+
+type RefreshResult = { accessToken: string; user: AuthUser } | null;
+let refreshInFlight: Promise<RefreshResult> | null = null;
+
+export async function refreshAccessToken(): Promise<RefreshResult> {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  refreshInFlight = (async (): Promise<RefreshResult> => {
+    try {
+      const { apiUrl } = getPublicEnv();
+      const refreshRes = await fetch(joinApiUrl(apiUrl, '/api/auth/refresh'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const refreshJson: unknown = await refreshRes.json().catch(() => null);
+
+      if (!refreshRes.ok) {
+        return null;
+      }
+
+      const parsed = parseEnvelope(refreshJson);
+      if (!parsed.ok) {
+        return null;
+      }
+
+      const data = parsed.data as { accessToken: string; user: AuthUser };
+      if (!data?.accessToken || !data?.user) {
+        return null;
+      }
+
+      await persistRefreshedSession(data.accessToken, data.user);
+      return { accessToken: data.accessToken, user: data.user };
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}
+
 const inFlightGetRequests = new Map<string, Promise<ApiResult<unknown>>>();
 const recentGetCache = new Map<
   string,
@@ -66,6 +125,7 @@ export async function apiFetch<T>(
     accessToken,
     cacheTtlMs = DEFAULT_CACHE_TTL_MS,
     disableDedupe = false,
+    skipAuthRefresh = false,
     ...requestInit
   } = options;
   const { apiUrl } = getPublicEnv();
@@ -122,65 +182,42 @@ export async function apiFetch<T>(
         const json: unknown = await res.json().catch(() => null);
 
         if (!res.ok) {
-          // Try to refresh token on 401
-          if (res.status === 401 && typeof window !== 'undefined') {
-            try {
-              const refreshRes = await fetch(
-                joinApiUrl(apiUrl, '/api/auth/refresh'),
-                {
-                  method: 'POST',
-                  credentials: 'include',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({}), // Empty body - token is read from cookie
-                },
-              );
+          const canAttemptRefresh =
+            res.status === 401 &&
+            typeof window !== 'undefined' &&
+            !skipAuthRefresh &&
+            Boolean(accessToken);
 
-              if (refreshRes.ok) {
-                const refreshData = (await refreshRes.json()) as {
-                  success: true;
-                  data: { accessToken: string };
-                };
-                if (refreshData.success && refreshData.data.accessToken) {
-                  // Retry original request with new token (token is managed by auth-store in sessionStorage)
-                  headers.set(
-                    'Authorization',
-                    `Bearer ${refreshData.data.accessToken}`,
-                  );
-                  const retryRes = await fetch(url, {
-                    ...requestInit,
-                    headers,
-                    credentials: 'include',
-                  });
-                  const retryJson: unknown = await retryRes
-                    .json()
-                    .catch(() => null);
+          if (canAttemptRefresh) {
+            const refreshed = await refreshAccessToken();
+            if (refreshed) {
+              headers.set('Authorization', `Bearer ${refreshed.accessToken}`);
+              const retryRes = await fetch(url, {
+                ...requestInit,
+                headers,
+                credentials: 'include',
+              });
+              const retryJson: unknown = await retryRes.json().catch(() => null);
 
-                  if (retryRes.ok) {
-                    const parsed = parseEnvelope(retryJson);
-                    if (!parsed.ok) {
-                      return { success: false, error: parsed.error };
-                    }
-                    const result: ApiResult<T> = {
-                      success: true,
-                      data: parsed.data as T,
-                    };
-                    if (canUseGetDedupe && cacheTtlMs > 0) {
-                      recentGetCache.set(cacheKey, {
-                        expiresAt: Date.now() + cacheTtlMs,
-                        value: result,
-                      });
-                    }
-                    return result;
-                  }
+              if (retryRes.ok) {
+                const parsed = parseEnvelope(retryJson);
+                if (!parsed.ok) {
+                  return { success: false, error: parsed.error };
                 }
+                const result: ApiResult<T> = {
+                  success: true,
+                  data: parsed.data as T,
+                };
+                if (canUseGetDedupe && cacheTtlMs > 0) {
+                  recentGetCache.set(cacheKey, {
+                    expiresAt: Date.now() + cacheTtlMs,
+                    value: result,
+                  });
+                }
+                return result;
               }
-            } catch {
-              // Refresh failed, continue with error handling
             }
 
-            // Refresh failed, dispatch unauthorized event
             window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
           }
 
@@ -191,7 +228,15 @@ export async function apiFetch<T>(
                 success: false,
                 error:
                   extractErrorMessage(json, res.status) ||
-                  'Too many requests. Please wait a few minutes and try again.',
+                  'Bahut zyada requests. 1-2 minute wait karke dubara try karein.',
+              };
+            }
+            if (res.status === 403) {
+              return {
+                success: false,
+                error:
+                  extractErrorMessage(json, res.status) ||
+                  'Access forbidden. Page refresh karein ya dubara login karein.',
               };
             }
             const msg = extractErrorMessage(json, res.status);
@@ -227,7 +272,11 @@ export async function apiFetch<T>(
           continue;
         }
         const message = e instanceof Error ? e.message : 'Network error';
-        return { success: false, error: message };
+        const friendlyMessage =
+          message === 'Failed to fetch' || message.includes('fetch')
+            ? 'API server se connect nahi ho saka. Backend (port 4000) check karein.'
+            : message;
+        return { success: false, error: friendlyMessage };
       }
     }
     return { success: false, error: 'Request failed after retries' };
@@ -261,6 +310,7 @@ export async function authLogin(
   }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(body),
+    skipAuthRefresh: true,
   });
 }
 
@@ -270,6 +320,7 @@ export async function authRegister(
   return apiFetch<{ email: string }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(body),
+    skipAuthRefresh: true,
   });
 }
 
@@ -285,19 +336,24 @@ export async function authVerifySignup(
   }>('/api/auth/verify-signup', {
     method: 'POST',
     body: JSON.stringify(body),
+    skipAuthRefresh: true,
   });
 }
 
 export async function authRefresh(): Promise<
   ApiResult<{ accessToken: string; user: AuthUser }>
 > {
-  return apiFetch<{ accessToken: string; user: AuthUser }>(
-    '/api/auth/refresh',
-    {
-      method: 'POST',
-      body: JSON.stringify({}), // Empty body - token is read from cookie
+  const refreshed = await refreshAccessToken();
+  if (!refreshed) {
+    return { success: false, error: 'Session expired. Please login again.' };
+  }
+  return {
+    success: true,
+    data: {
+      accessToken: refreshed.accessToken,
+      user: refreshed.user,
     },
-  );
+  };
 }
 
 export async function authLogout(): Promise<
@@ -305,6 +361,7 @@ export async function authLogout(): Promise<
 > {
   return apiFetch<{ success: true; message: string }>('/api/auth/logout', {
     method: 'POST',
+    skipAuthRefresh: true,
   });
 }
 
@@ -396,11 +453,11 @@ export async function acquireNumber(
 
 export async function releaseNumber(
   accessToken?: string | null,
-): Promise<ApiResult<{ success: boolean; error?: string }>> {
-  return apiFetch<{ success: boolean; error?: string }>(
+): Promise<ApiResult<{ refunded?: boolean; refundAmountPkr?: number | null }>> {
+  return apiFetch<{ refunded?: boolean; refundAmountPkr?: number | null }>(
     '/api/numbers/release',
     {
-      method: 'DELETE',
+      method: 'POST',
       accessToken,
     },
   );

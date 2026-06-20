@@ -49,7 +49,7 @@ export default function WalletPage(): React.ReactElement {
 
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-4xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Wallet</h1>
         <p className="text-muted-foreground">Balance and transaction history.</p>

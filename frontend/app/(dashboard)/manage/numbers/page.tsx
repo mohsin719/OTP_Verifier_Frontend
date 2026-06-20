@@ -134,7 +134,7 @@ export default function AdminNumbersPage(): React.ReactElement {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-8">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Numbers</h1>

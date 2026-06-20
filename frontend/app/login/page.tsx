@@ -42,7 +42,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="flex min-h-screen w-full min-w-0 items-center justify-center overflow-x-hidden p-4">
       <Card className="w-full max-w-md border-border/80">
         <CardHeader>
           <CardTitle>Sign in</CardTitle>

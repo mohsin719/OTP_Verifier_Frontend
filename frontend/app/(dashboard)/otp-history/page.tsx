@@ -35,7 +35,7 @@ export default function OtpHistoryPage(): React.ReactElement {
   const total = data?.total ?? 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">OTP history</h1>
         <p className="text-muted-foreground">

@@ -2,13 +2,14 @@ import type { ReactElement, ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, Shield, Zap, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand/brand-logo";
 
 export default function LandingPage(): ReactElement {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen w-full min-w-0 flex-col overflow-x-hidden">
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <span className="text-lg font-semibold tracking-tight">VerifySMS</span>
+        <div className="mx-auto flex h-16 w-full min-w-0 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <BrandLogo href="/" imageClassName="h-9 w-9" />
           <nav className="flex items-center gap-4">
             <Link
               href="/login"
@@ -26,7 +27,7 @@ export default function LandingPage(): ReactElement {
         </div>
       </header>
       <main className="flex flex-1 flex-col">
-        <section className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-24 md:flex-row md:items-center md:py-32">
+        <section className="mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-10 px-4 py-16 sm:px-6 sm:py-20 md:flex-row md:items-center md:py-32">
           <div className="flex-1 space-y-6">
             <p className="inline-flex rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
               Secure, instant, and reliable SMS verification
@@ -63,7 +64,7 @@ export default function LandingPage(): ReactElement {
         </section>
       </main>
       <footer className="border-t border-border py-8 text-center text-sm text-muted-foreground">
-        VerifySMS — Virtual SMS verification platform
+        US Num Hub — Virtual SMS verification platform
       </footer>
     </div>
   );

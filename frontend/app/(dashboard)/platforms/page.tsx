@@ -60,7 +60,7 @@ export default function PlatformsPage(): React.ReactElement {
   const visiblePlatforms = platforms.filter((platform) => platform.name === selectedPlatformName);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Platform Numbers</h1>
         <p className="text-muted-foreground">
@@ -68,7 +68,7 @@ export default function PlatformsPage(): React.ReactElement {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid w-full min-w-0 gap-6 md:grid-cols-2">
         {visiblePlatforms.map((platform) => (
           <Card key={platform.name} className="group hover:shadow-lg transition-shadow">
             <CardHeader>
