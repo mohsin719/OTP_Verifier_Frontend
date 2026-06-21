@@ -1,16 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { Phone, Shield, Zap } from "lucide-react";
+import { Phone, Shield, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
+import { useApi } from "@/hooks/use-api";
 
 export default function DashboardPage(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.role === "ADMIN";
   const { balancePkr, isLoading } = useWalletStore();
+  const { data: adminStats, isLoading: statsLoading } = useApi<{ totalUsers: number }>(
+    isAdmin ? "/api/manage/stats" : null,
+    { cacheTtlMs: 30_000 },
+  );
 
   const pkrBalanceFormatter = new Intl.NumberFormat("en-PK", {
     style: "currency",
@@ -21,16 +27,40 @@ export default function DashboardPage(): React.ReactElement {
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8">
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight break-words sm:text-3xl">
+        <h1 className="text-2xl font-bold tracking-tight wrap-break-word sm:text-3xl">
           Dashboard Overview
         </h1>
-        <p className="mt-1 break-words text-muted-foreground">
+        <p className="mt-1 wrap-break-word text-muted-foreground">
           Welcome back. You are authenticated securely as{" "}
           <span className="font-medium text-foreground">{user?.publicId}</span>
         </p>
       </div>
       
       <div className="grid w-full min-w-0 gap-6 sm:grid-cols-2">
+        {isAdmin ? (
+          <Card className="border-border/50 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Users className="h-4 w-4 text-blue-500" />
+                Total Registered Users
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {statsLoading ? (
+                <Skeleton className="h-10 w-24 mt-1" />
+              ) : (
+                <p className="text-4xl font-bold tracking-tight tabular-nums text-foreground">
+                  {adminStats?.totalUsers ?? 0}
+                </p>
+              )}
+              <p className="mt-3 text-xs text-muted-foreground">
+                <Link href="/manage/users" className="text-primary underline underline-offset-4">
+                  View all users
+                </Link>
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
         <Card className="border-border/50 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Available Balance</CardTitle>
@@ -48,7 +78,7 @@ export default function DashboardPage(): React.ReactElement {
                 </span>
               </div>
             )}
-            <p className="mt-3 flex items-center gap-1.5 break-words text-xs text-muted-foreground">
+            <p className="mt-3 flex items-center gap-1.5 wrap-break-word text-xs text-muted-foreground">
               <Shield className="h-3.5 w-3.5 text-green-500" />
               Funds are secure and ready for immediate deployment
             </p>
@@ -66,7 +96,7 @@ export default function DashboardPage(): React.ReactElement {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 relative z-10">
-            <p className="text-sm leading-relaxed break-words text-muted-foreground">
+            <p className="text-sm leading-relaxed wrap-break-word text-muted-foreground">
               Select a target service platform to securely allocate a dedicated, temporary virtual number for one-time password (OTP) verification.
             </p>
             <Button asChild className="w-full sm:w-auto shadow-md transition-all hover:shadow-lg">

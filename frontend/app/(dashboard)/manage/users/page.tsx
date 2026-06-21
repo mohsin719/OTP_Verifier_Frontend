@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import { useAuthStore } from "@/stores/auth-store";
-import { Ban, RefreshCw, UserCheck } from "lucide-react";
+import { Ban, RefreshCw, UserCheck, Users, UserX } from "lucide-react";
 
 type UserRow = {
   id: string;
@@ -32,12 +32,21 @@ type UserRow = {
   createdAt: string;
 };
 
+function getVisiblePages(current: number, totalPages: number): number[] {
+  if (totalPages <= 1) return [1];
+  const pages = new Set<number>([1, totalPages, current]);
+  for (let i = current - 1; i <= current + 1; i += 1) {
+    if (i >= 1 && i <= totalPages) pages.add(i);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+
 export default function AdminUsersPage(): React.ReactElement {
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
 
   const [page, setPage] = useState(1);
-  const [limit] = useState(20);
+  const [limit] = useState(30);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -81,12 +90,20 @@ export default function AdminUsersPage(): React.ReactElement {
   const { data, isLoading, mutate } = useApi<{
     items: UserRow[];
     total: number;
+    activeCount: number;
+    bannedCount: number;
+    page: number;
+    limit: number;
   }>(`/api/manage/users?${query.toString()}`, {
     cacheTtlMs: 30_000,
   });
 
   const items = data?.items ?? null;
   const total = data?.total ?? 0;
+  const activeCount = data?.activeCount ?? 0;
+  const bannedCount = data?.bannedCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const visiblePages = getVisiblePages(page, totalPages);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -232,7 +249,14 @@ export default function AdminUsersPage(): React.ReactElement {
   const refreshUsers = async () => {
     if (!token) return;
     setIsRefreshing(true);
-    const fresh = await apiFetch<{ items: UserRow[]; total: number }>(
+    const fresh = await apiFetch<{
+      items: UserRow[];
+      total: number;
+      activeCount: number;
+      bannedCount: number;
+      page: number;
+      limit: number;
+    }>(
       `/api/manage/users?${query.toString()}&refresh=true`,
       {
         accessToken: token,
@@ -256,6 +280,42 @@ export default function AdminUsersPage(): React.ReactElement {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Users</h1>
         <p className="text-muted-foreground">Manage user accounts and balances.</p>
+      </div>
+
+      <div className="grid w-full min-w-0 gap-4 sm:grid-cols-3">
+        <Card className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Users</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="flex items-center gap-2 text-2xl font-bold tabular-nums">
+              <Users className="h-5 w-5 text-blue-500" />
+              {isLoading ? "—" : total}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active Users</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="flex items-center gap-2 text-2xl font-bold tabular-nums text-green-500">
+              <UserCheck className="h-5 w-5" />
+              {isLoading ? "—" : activeCount}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Banned Users</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="flex items-center gap-2 text-2xl font-bold tabular-nums text-red-500">
+              <UserX className="h-5 w-5" />
+              {isLoading ? "—" : bannedCount}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -330,8 +390,13 @@ export default function AdminUsersPage(): React.ReactElement {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Users ({total})</CardTitle>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <CardTitle>Users ({total})</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Newest users first · {limit} per page
+              </p>
+            </div>
             <Button
               size="sm"
               variant="outline"
@@ -353,17 +418,23 @@ export default function AdminUsersPage(): React.ReactElement {
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-border text-muted-foreground">
-                      <th className="pb-2">Username</th>
-                      <th className="pb-2">Platform</th>
-                      <th className="pb-2">Status</th>
+                      <th className="pb-2 pr-3 w-12">#</th>
+                      <th className="pb-2 pr-4">Username</th>
+                      <th className="pb-2 pr-4">Email</th>
+                      <th className="pb-2 pr-4">Platform</th>
+                      <th className="pb-2 pr-4">Status</th>
                       <th className="pb-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((u) => (
+                    {items.map((u, index) => (
                       <tr key={u.id} className="border-b border-border/60">
-                        <td className="py-2 font-medium">{u.username}</td>
-                        <td className="py-2">{u.preferredPlatform || "Facebook"}</td>
+                        <td className="py-2 pr-3 text-muted-foreground tabular-nums">
+                          {(page - 1) * limit + index + 1}
+                        </td>
+                        <td className="py-2 pr-4 font-medium">{u.username}</td>
+                        <td className="py-2 pr-4 text-muted-foreground">{u.email}</td>
+                        <td className="py-2 pr-4">{u.preferredPlatform || "—"}</td>
                         <td className="py-2">
                           {u.isBanned ? (
                             <span className="inline-flex items-center gap-1 text-red-500">
@@ -399,29 +470,56 @@ export default function AdminUsersPage(): React.ReactElement {
                 </table>
               </div>
 
-              <div className="mt-4 flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  Showing {(page - 1) * limit + 1} - {Math.min(page * limit, total)} of {total}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPage((p) => p + 1)}
-                    disabled={page * limit >= total}
-                  >
-                    Next
-                  </Button>
+              {total > limit ? (
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total} users
+                    {" · "}
+                    Page {page} of {totalPages}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                    >
+                      Previous
+                    </Button>
+                    {visiblePages.map((pageNum, idx) => {
+                      const prev = visiblePages[idx - 1];
+                      const showEllipsis = prev !== undefined && pageNum - prev > 1;
+                      return (
+                        <span key={pageNum} className="flex items-center gap-1">
+                          {showEllipsis ? (
+                            <span className="px-1 text-muted-foreground">…</span>
+                          ) : null}
+                          <Button
+                            size="sm"
+                            variant={pageNum === page ? "default" : "outline"}
+                            onClick={() => setPage(pageNum)}
+                            className="min-w-9 tabular-nums"
+                          >
+                            {pageNum}
+                          </Button>
+                        </span>
+                      );
+                    })}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Showing all {total} user{total === 1 ? "" : "s"}
+                </p>
+              )}
             </>
           )}
         </CardContent>
