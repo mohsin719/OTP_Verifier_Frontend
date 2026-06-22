@@ -41,6 +41,16 @@ function getVisiblePages(current: number, totalPages: number): number[] {
   return [...pages].sort((a, b) => a - b);
 }
 
+const pkrFormatter = new Intl.NumberFormat("en-PK", {
+  style: "currency",
+  currency: "PKR",
+  maximumFractionDigits: 0,
+});
+
+function formatBalancePkr(amount: number): string {
+  return pkrFormatter.format(Number.isFinite(amount) ? amount : 0);
+}
+
 export default function AdminUsersPage(): React.ReactElement {
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
@@ -422,6 +432,7 @@ export default function AdminUsersPage(): React.ReactElement {
                       <th className="pb-2 pr-4">Username</th>
                       <th className="pb-2 pr-4">Email</th>
                       <th className="pb-2 pr-4">Platform</th>
+                      <th className="pb-2 pr-4">Balance</th>
                       <th className="pb-2 pr-4">Status</th>
                       <th className="pb-2">Actions</th>
                     </tr>
@@ -435,7 +446,10 @@ export default function AdminUsersPage(): React.ReactElement {
                         <td className="py-2 pr-4 font-medium">{u.username}</td>
                         <td className="py-2 pr-4 text-muted-foreground">{u.email}</td>
                         <td className="py-2 pr-4">{u.preferredPlatform || "—"}</td>
-                        <td className="py-2">
+                        <td className="py-2 pr-4 font-medium tabular-nums whitespace-nowrap">
+                          {formatBalancePkr(u.balancePkr ?? 0)}
+                        </td>
+                        <td className="py-2 pr-4">
                           {u.isBanned ? (
                             <span className="inline-flex items-center gap-1 text-red-500">
                               <Ban className="h-3 w-3" /> Banned
