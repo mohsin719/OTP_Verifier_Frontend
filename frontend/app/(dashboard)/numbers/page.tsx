@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, memo } from "react";
+import { useEffect, useRef, useState, useCallback, memo, useMemo } from "react";
 import { Copy, Phone, RefreshCw, ShieldCheck, Clock, Wifi, Info } from "lucide-react";
 import { toast } from "sonner";
 import { io, type Socket } from "socket.io-client";
@@ -34,6 +34,7 @@ type ActiveNumber = {
   parsedOtp: string | null;
   otpStatus: "PENDING" | "RECEIVED" | "EXPIRED" | "FAILED";
   otpRequestId: string;
+  serviceType?: string | null;
 };
 
 const DEFAULT_FACEBOOK_PRICE_PKR = 30;
@@ -98,7 +99,104 @@ function NumbersPage() {
   const [showRechargePopup, setShowRechargePopup] = useState(false);
   const [rechargeServicePrice, setRechargeServicePrice] = useState<number | undefined>(undefined);
   const [rechargeDescription, setRechargeDescription] = useState<string | undefined>(undefined);
-  const active = optimisticActive ?? fetchedActive ?? null;
+  const rawActive = optimisticActive ?? fetchedActive ?? null;
+  const adjustWallet = useWalletStore((s) => s.adjustBalance);
+  const fetchWalletBalance = useWalletStore((s) => s.fetchBalance);
+
+  const syncWalletAfterRefund = useCallback(
+    async (refundAmountPkr?: number | null) => {
+      if (refundAmountPkr && refundAmountPkr > 0) {
+        adjustWallet(refundAmountPkr);
+      }
+      if (token) {
+        await fetchWalletBalance(token);
+      }
+    },
+    [adjustWallet, fetchWalletBalance, token],
+  );
+
+  const syncWalletBalance = useCallback(async () => {
+    if (token) {
+      await fetchWalletBalance(token);
+    }
+  }, [fetchWalletBalance, token]);
+  const expireHandledRef = useRef<string | null>(null);
+
+  const displayOtp = rawActive?.parsedOtp ?? polledOtp;
+  const hasReceivedOtp =
+    rawActive?.otpStatus === "RECEIVED" || Boolean(displayOtp);
+
+  /** Hide expired leases without OTP even if SWR still has stale data */
+  const active = useMemo(() => {
+    if (!rawActive) {
+      return null;
+    }
+    const expired =
+      Boolean(rawActive.leasedUntil) &&
+      secondsUntil(rawActive.leasedUntil) <= 0;
+    if (expired && !hasReceivedOtp) {
+      return null;
+    }
+    return rawActive;
+  }, [rawActive, hasReceivedOtp]);
+
+  const activeServiceType = rawActive?.serviceType
+    ? normalizeServiceType(rawActive.serviceType)
+    : null;
+  const platformMismatch =
+    Boolean(rawActive) &&
+    !hasReceivedOtp &&
+    activeServiceType !== null &&
+    activeServiceType !== serviceType;
+
+  const clearActiveState = useCallback(
+    async (revalidate = true) => {
+      setOptimisticActive(null);
+      setPolledOtp(null);
+      await refresh(null, { revalidate });
+    },
+    [refresh],
+  );
+
+  const handleLeaseExpired = useCallback(async () => {
+    if (!token || !rawActive || hasReceivedOtp) {
+      return;
+    }
+
+    const leaseKey = rawActive.otpRequestId || rawActive.e164;
+    if (expireHandledRef.current === leaseKey) {
+      return;
+    }
+    expireHandledRef.current = leaseKey;
+
+    setShowChangeNumberDialog(false);
+    await clearActiveState(false);
+
+    try {
+      const res = await apiFetch<{
+        refunded?: boolean;
+        refundAmountPkr?: number | null;
+      }>("/api/numbers/release", {
+        method: "POST",
+        accessToken: token,
+      });
+
+      if (res.success && res.data?.refunded && res.data.refundAmountPkr) {
+        await syncWalletAfterRefund(res.data.refundAmountPkr);
+        toast.success(
+          `Lease expired. PKR ${res.data.refundAmountPkr} refunded to your wallet.`,
+        );
+      } else {
+        await syncWalletBalance();
+      }
+
+      await refresh();
+    } catch (err) {
+      console.error("Lease expiry cleanup failed:", err);
+      await syncWalletBalance();
+      await refresh();
+    }
+  }, [token, rawActive, hasReceivedOtp, clearActiveState, syncWalletAfterRefund, syncWalletBalance, refresh]);
 
   const checkBalanceRequirement = useCallback((requiredPrice: number): boolean => {
     if (balancePkr === null) {
@@ -124,24 +222,22 @@ function NumbersPage() {
 
   // Countdown timer — ticks every second from leasedUntil
   useEffect(() => {
-    if (!active?.leasedUntil) {
+    if (!rawActive?.leasedUntil) {
       setCountdown(0);
+      expireHandledRef.current = null;
       return;
     }
-    setCountdown(secondsUntil(active.leasedUntil));
+    setCountdown(secondsUntil(rawActive.leasedUntil));
     const tick = setInterval(() => {
-      const remaining = secondsUntil(active.leasedUntil);
+      const remaining = secondsUntil(rawActive.leasedUntil);
       setCountdown(remaining);
-      
-      // Auto-reset when lease expires
-      if (remaining <= 0) {
-        setOptimisticActive(null);
-        setPolledOtp(null);
-        void refresh();
+
+      if (remaining <= 0 && !hasReceivedOtp) {
+        void handleLeaseExpired();
       }
     }, 1000);
     return () => clearInterval(tick);
-  }, [active?.leasedUntil, refresh]);
+  }, [rawActive?.leasedUntil, hasReceivedOtp, handleLeaseExpired]);
 
   // WebSocket for real-time OTP push — only while actively waiting for OTP
   useEffect(() => {
@@ -286,8 +382,6 @@ function NumbersPage() {
     };
   }, [active?.e164, active?.otpStatus, active?.parsedOtp, polledOtp, token, refresh]);
 
-  const invalidateWallet = useWalletStore((s) => s.invalidate);
-
   useEffect(() => {
     setPolledOtp(null);
   }, [active?.e164]);
@@ -312,8 +406,91 @@ function NumbersPage() {
     [],
   );
 
+  const assignActiveNumber = useCallback(
+    (data: {
+      phoneNumber: string;
+      leasedUntil: string;
+      otpRequestId: string;
+      leaseId?: string;
+    }) => {
+      expireHandledRef.current = null;
+      setOptimisticActive({
+        e164: data.phoneNumber,
+        leasedUntil: data.leasedUntil,
+        parsedOtp: null,
+        otpStatus: "PENDING",
+        otpRequestId: data.otpRequestId ?? data.leaseId ?? "pending",
+        serviceType,
+      });
+      setPolledOtp(null);
+      void syncWalletBalance();
+      void refresh();
+    },
+    [syncWalletBalance, refresh, serviceType],
+  );
+
+  const replaceActiveNumber = useCallback(async () => {
+    if (!token) return false;
+
+    if (checkBalanceRequirement(servicePrice)) {
+      openRechargePopup(servicePrice, "Insufficient funds for this platform.");
+      return false;
+    }
+
+    setPending(true);
+    try {
+      const res = await apiFetch<{
+        phoneNumber: string;
+        leasedUntil: string;
+        otpRequestId: string;
+        leaseId?: string;
+      }>("/api/numbers/change", {
+        method: "POST",
+        accessToken: token,
+        body: JSON.stringify({ serviceType }),
+      });
+
+      if (!res.success) {
+        if (res.error === "INSUFFICIENT_BALANCE") {
+          openRechargePopup(servicePrice, "Insufficient funds for this platform.");
+          return false;
+        }
+        toast.error(res.error);
+        return false;
+      }
+
+      assignActiveNumber(res.data);
+      toast.success(
+        platformMismatch
+          ? `Switched to ${userPlatform}. Your previous number was cancelled and refunded.`
+          : "Number changed successfully! New number assigned.",
+      );
+      return true;
+    } catch (err) {
+      console.error("Replace number failed:", err);
+      toast.error("Failed to get a new number. Please try again.");
+      return false;
+    } finally {
+      setPending(false);
+    }
+  }, [
+    token,
+    serviceType,
+    servicePrice,
+    checkBalanceRequirement,
+    openRechargePopup,
+    assignActiveNumber,
+    platformMismatch,
+    userPlatform,
+  ]);
+
   const acquire = useCallback(async () => {
     if (!token) return;
+
+    if (rawActive && !hasReceivedOtp) {
+      await replaceActiveNumber();
+      return;
+    }
 
     // Check balance before making API call
     if (checkBalanceRequirement(servicePrice)) {
@@ -342,19 +519,21 @@ function NumbersPage() {
       return;
     }
     toast.success("Virtual number assigned!");
-    setOptimisticActive({
-      e164: res.data.phoneNumber,
-      leasedUntil: res.data.leasedUntil,
-      parsedOtp: null,
-      otpStatus: "PENDING",
-      otpRequestId: res.data.otpRequestId ?? res.data.leaseId ?? "pending",
-    });
-    setPolledOtp(null);
-    invalidateWallet(); // Immediately refresh header PKR balance
+    assignActiveNumber(res.data);
     
     // Use response data directly - no need for refresh or delay
     // The backend now returns full phone data in the response
-  }, [token, invalidateWallet, serviceType, servicePrice, checkBalanceRequirement, openRechargePopup]);
+  }, [
+    token,
+    rawActive,
+    hasReceivedOtp,
+    replaceActiveNumber,
+    serviceType,
+    servicePrice,
+    checkBalanceRequirement,
+    openRechargePopup,
+    assignActiveNumber,
+  ]);
 
   const copyNumber = useCallback(() => {
     if (!active?.e164) return;
@@ -427,17 +606,24 @@ function NumbersPage() {
       });
       
       if (res.success) {
-        setOptimisticActive(null);
-        setPolledOtp(null);
+        setShowChangeNumberDialog(false);
+        expireHandledRef.current = null;
+        await clearActiveState(true);
         if (res.data?.refunded && res.data.refundAmountPkr) {
+          await syncWalletAfterRefund(res.data.refundAmountPkr);
           toast.success(
-            `Number cancel ho gaya. PKR ${res.data.refundAmountPkr} wallet mein wapas aa gaye.`,
+            `Number cancelled. PKR ${res.data.refundAmountPkr} has been refunded to your wallet.`,
           );
         } else {
-          toast.success("Number release ho gaya (OTP mil chuka tha — refund nahi hua).");
+          await syncWalletBalance();
+          if (hasReceivedOtp) {
+            toast.success(
+              "Number released. No refund — OTP was already received.",
+            );
+          } else {
+            toast.success("Number cancelled. You can get a new number.");
+          }
         }
-        invalidateWallet();
-        void refresh();
       } else {
         toast.error(res.error || "Failed to release number");
       }
@@ -447,11 +633,7 @@ function NumbersPage() {
     } finally {
       setLoadingRefresh(false);
     }
-  }, [token, refresh, invalidateWallet]);
-
-  const displayOtp = active?.parsedOtp ?? polledOtp;
-  const hasReceivedOtp =
-    active?.otpStatus === "RECEIVED" || Boolean(displayOtp);
+  }, [token, clearActiveState, syncWalletAfterRefund, syncWalletBalance, hasReceivedOtp]);
 
   const handleRefundOnly = useCallback(async () => {
     setShowChangeNumberDialog(false);
@@ -493,16 +675,14 @@ function NumbersPage() {
       });
       
       if (res.success) {
-        setOptimisticActive({
-          e164: res.data.phoneNumber,
+        expireHandledRef.current = null;
+        assignActiveNumber({
+          phoneNumber: res.data.phoneNumber,
           leasedUntil: res.data.leasedUntil,
-          parsedOtp: null,
-          otpStatus: "PENDING",
-          otpRequestId: res.data.otpRequestId ?? res.data.leaseId ?? "pending",
+          otpRequestId: res.data.otpRequestId,
+          leaseId: res.data.leaseId,
         });
-        setPolledOtp(null);
         toast.success("Number changed successfully! New number assigned.");
-        invalidateWallet();
       } else {
         if (res.error === "INSUFFICIENT_BALANCE") {
           openRechargePopup(servicePrice, "Insufficient funds for this platform.");
@@ -516,7 +696,7 @@ function NumbersPage() {
     } finally {
       setLoadingChangeNumber(false);
     }
-  }, [token, serviceType, invalidateWallet, servicePrice, checkBalanceRequirement, openRechargePopup]);
+  }, [token, serviceType, servicePrice, checkBalanceRequirement, openRechargePopup, assignActiveNumber]);
 
   const confirmPostOtpChange = useCallback(async () => {
     setShowPostOtpChangeDialog(false);
@@ -581,6 +761,14 @@ function NumbersPage() {
         </CardHeader>
 
         <CardContent className="space-y-5">
+          {platformMismatch && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              You switched to <strong className="text-amber-100">{userPlatform}</strong>.
+              Your current number was leased for a different platform. Tap{" "}
+              <strong className="text-amber-100">Switch to {userPlatform}</strong>{" "}
+              below to cancel it, get your refund, and receive a new number.
+            </div>
+          )}
           {loading ? (
             <div className="space-y-3">
               <Skeleton className="h-20 w-full rounded-xl" />
@@ -707,7 +895,7 @@ function NumbersPage() {
                   ? "Changing..."
                   : hasReceivedOtp
                     ? "Change Number"
-                    : "Refund / Change Number"}
+                    : "Cancel"}
               </Button>
               )}
               </div>
@@ -738,8 +926,8 @@ function NumbersPage() {
             </div>
           )}
 
-          {/* Acquire Button */}
-          {!active && (
+          {/* Acquire / platform switch */}
+          {(!active || platformMismatch) && (
             <Button
               onClick={() => void acquire()}
               disabled={pending}
@@ -750,12 +938,14 @@ function NumbersPage() {
               {pending ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  Reserving number…
+                  {platformMismatch ? "Switching platform…" : "Reserving number…"}
                 </>
               ) : (
                 <>
                   <Phone className="h-4 w-4" />
-                  Get US Number (Rs {servicePrice})
+                  {platformMismatch
+                    ? `Switch to ${userPlatform} (Rs ${servicePrice})`
+                    : `Get US Number (Rs ${servicePrice})`}
                 </>
               )}
             </Button>
@@ -795,10 +985,10 @@ function NumbersPage() {
       <Dialog open={showChangeNumberDialog} onOpenChange={setShowChangeNumberDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Refund / Change Number</DialogTitle>
+            <DialogTitle>Cancel</DialogTitle>
             <DialogDescription>
-              OTP abhi receive nahi hui. Wallet refund le kar number cancel karein, ya naya
-              number assign karwayein.
+              No OTP yet. <strong>Yes</strong> cancels and refunds Rs {servicePrice}.{" "}
+              <strong>No</strong> keeps this number.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2 pt-2 sm:flex-row">
@@ -808,10 +998,13 @@ function NumbersPage() {
               onClick={() => void handleRefundOnly()}
               disabled={loadingRefresh}
             >
-              {loadingRefresh ? "Processing…" : "Get Refund"}
+              {loadingRefresh ? "Processing…" : "Yes"}
             </Button>
-            <Button className="flex-1" onClick={() => void confirmChangeNumber()}>
-              Change Number
+            <Button
+              className="flex-1"
+              onClick={() => setShowChangeNumberDialog(false)}
+            >
+              No
             </Button>
           </div>
         </DialogContent>
@@ -823,8 +1016,8 @@ function NumbersPage() {
           <DialogHeader>
             <DialogTitle>Change Number</DialogTitle>
             <DialogDescription>
-              OTP receive ho chuki hai — refund available nahi. Naya number lene par Rs{" "}
-              {servicePrice} charge hoga.
+              OTP has already been received, so a refund is not available. Getting a new number
+              will charge Rs {servicePrice}.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 pt-2">

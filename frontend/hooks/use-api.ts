@@ -9,22 +9,18 @@ export function useApi<T>(
   const token = useAuthStore((s) => s.token);
   
   const fetcher = async (url: string) => {
-    try {
-      const res = await apiFetch<T>(url, {
-        accessToken: token,
-        disableDedupe: options?.disableDedupe,
-        cacheTtlMs: options?.cacheTtlMs,
-      });
-      
-      if (!res.success) {
-        throw new Error(res.error);
-      }
-      
-      return res.data;
-    } catch (error) {
-      console.error(`Fetch Error for ${url}:`, error);
+    const res = await apiFetch<T>(url, {
+      accessToken: token,
+      disableDedupe: options?.disableDedupe,
+      cacheTtlMs: options?.cacheTtlMs,
+    });
+
+    if (!res.success) {
+      console.error(`Fetch Error for ${url}:`, res.error);
       return null as T;
     }
+
+    return res.data;
   };
 
   const key = path && token ? path : null;

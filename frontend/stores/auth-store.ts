@@ -17,6 +17,7 @@ type AuthState = {
   /** Blocks cookie-based auto-login after explicit logout */
   sessionRevoked: boolean;
   setAuth: (token: string, user: AuthUser) => void;
+  setPreferredPlatform: (platform: string) => void;
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
   restoreSession: () => Promise<boolean>;
@@ -67,6 +68,12 @@ export const useAuthStore = create<AuthState>()(
       hydrated: false,
       sessionRevoked: false,
       setAuth: (token, user) => set({ token, user, sessionRevoked: false }),
+      setPreferredPlatform: (platform) =>
+        set((state) => ({
+          user: state.user
+            ? { ...state.user, preferredPlatform: platform }
+            : null,
+        })),
       logout: async () => {
         const accessToken = get().token;
         set({ sessionRevoked: true, token: null, user: null });

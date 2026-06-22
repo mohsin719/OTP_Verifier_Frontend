@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { authRegister, authVerifySignup } from "@/lib/api";
+import { PLATFORM_OPTIONS } from "@/lib/platforms";
 import { useAuthStore } from "@/stores/auth-store";
 import { GuestOnly } from "@/components/auth/guest-only";
 
@@ -39,7 +40,7 @@ export default function RegisterPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
 
-  const platformOptions = ["Facebook", "Amazon", "Walmart", "Others"];
+  const platformOptions = [...PLATFORM_OPTIONS];
 
   async function onSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();

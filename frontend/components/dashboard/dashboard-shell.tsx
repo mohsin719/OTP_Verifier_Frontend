@@ -87,7 +87,7 @@ export function DashboardShell({
     if (lastFetchedAt && now - lastFetchedAt < WALLET_CACHE_TTL_MS) return;
 
     const cached = localStorage.getItem("wallet_balance_cache");
-    if (cached) {
+    if (cached && lastFetchedAt !== null) {
       try {
         const { balance, timestamp } = JSON.parse(cached) as {
           balance: number;
@@ -112,10 +112,6 @@ export function DashboardShell({
         });
         if (res.success) {
           setBalance(res.data.balancePkr);
-          localStorage.setItem(
-            "wallet_balance_cache",
-            JSON.stringify({ balance: res.data.balancePkr, timestamp: Date.now() }),
-          );
         }
       } catch (error) {
         console.error("Failed to fetch balance:", error);

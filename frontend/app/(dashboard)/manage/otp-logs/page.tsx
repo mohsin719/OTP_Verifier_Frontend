@@ -19,11 +19,12 @@ type OtpLogRow = {
   serviceType: string | null;
   priceAtRequestPkr: number | null;
   status: string;
+  refunded?: boolean;
   parsedOtp: string | null;
   createdAt: string;
 };
 
-const STATUS_FILTERS = ["ALL", "PENDING", "FAILED", "CONFIRM"];
+const STATUS_FILTERS = ["ALL", "PENDING", "EXPIRED", "FAILED", "CONFIRM"] as const;
 
 export default function AdminOtpLogsPage(): React.ReactElement {
   const token = useAuthStore((s) => s.token);
@@ -81,21 +82,28 @@ export default function AdminOtpLogsPage(): React.ReactElement {
     toast.success("OTP logs refreshed from backend.");
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, refunded?: boolean) => {
+    const label =
+      status === "EXPIRED" && refunded
+        ? "EXPIRE/REFUND"
+        : status === "RECEIVED"
+          ? "CONFIRM"
+          : status;
     const colors: Record<string, string> = {
       PENDING: "bg-yellow-500/10 text-yellow-500",
       RECEIVED: "bg-green-500/10 text-green-500",
       FAILED: "bg-red-500/10 text-red-500",
       EXPIRED: "bg-gray-500/10 text-gray-500",
+      "EXPIRE/REFUND": "bg-orange-500/10 text-orange-400",
       CONFIRM: "bg-green-500/10 text-green-500",
     };
     return (
       <span
         className={`inline-flex rounded-full px-2 py-1 text-xs ${
-          colors[status] || "bg-gray-500/10 text-gray-500"
+          colors[label] || "bg-gray-500/10 text-gray-500"
         }`}
       >
-        {status === "RECEIVED" ? "CONFIRM" : status}
+        {label}
       </span>
     );
   };
@@ -185,7 +193,7 @@ export default function AdminOtpLogsPage(): React.ReactElement {
                         <td className="py-2 font-mono text-xs">{row.phone}</td>
                         <td className="py-2 capitalize">{row.serviceType ?? "-"}</td>
                         <td className="py-2">{row.priceAtRequestPkr != null ? `Rs ${row.priceAtRequestPkr}` : "-"}</td>
-                        <td className="py-2">{getStatusBadge(row.status)}</td>
+                        <td className="py-2">{getStatusBadge(row.status, row.refunded)}</td>
                         <td className="py-2 font-mono">
                           {row.parsedOtp ?? "—"}
                         </td>

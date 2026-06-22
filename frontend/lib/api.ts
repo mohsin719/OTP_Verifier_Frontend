@@ -240,7 +240,7 @@ export async function apiFetch<T>(
                 success: false,
                 error:
                   extractErrorMessage(json, res.status) ||
-                  'Bahut zyada requests. 1-2 minute wait karke dubara try karein.',
+                  'Too many requests. Please wait 1–2 minutes and try again.',
               };
             }
             if (res.status === 403) {
@@ -248,7 +248,7 @@ export async function apiFetch<T>(
                 success: false,
                 error:
                   extractErrorMessage(json, res.status) ||
-                  'Access forbidden. Page refresh karein ya dubara login karein.',
+                  'Access forbidden. Please refresh the page or sign in again.',
               };
             }
             const msg = extractErrorMessage(json, res.status);
@@ -286,7 +286,7 @@ export async function apiFetch<T>(
         const message = e instanceof Error ? e.message : 'Network error';
         const friendlyMessage =
           message === 'Failed to fetch' || message.includes('fetch')
-            ? 'API server se connect nahi ho saka. Backend (port 4000) check karein.'
+            ? 'Could not connect to the API server. Please check that the backend is running (port 4000).'
             : message;
         return { success: false, error: friendlyMessage };
       }
@@ -382,6 +382,17 @@ export async function authMe(
   accessToken?: string | null,
 ): Promise<ApiResult<AuthUser>> {
   return apiFetch<AuthUser>('/api/auth/me', { accessToken });
+}
+
+export async function authUpdatePreferredPlatform(
+  preferredPlatform: string,
+  accessToken?: string | null,
+): Promise<ApiResult<AuthUser>> {
+  return apiFetch<AuthUser>('/api/auth/preferred-platform', {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify({ preferredPlatform }),
+  });
 }
 
 export async function authForgotPasswordRequest(

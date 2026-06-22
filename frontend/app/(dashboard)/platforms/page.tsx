@@ -1,98 +1,159 @@
 "use client";
 
-import Link from "next/link";
-import { Globe, ShoppingBag, Tag } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { ArrowRight, CheckCircle2, Globe, ShoppingBag, Smartphone, Tag } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { authUpdatePreferredPlatform } from "@/lib/api";
+import { PLATFORM_CARDS } from "@/lib/platforms";
 import { useAuthStore } from "@/stores/auth-store";
+import { cn } from "@/lib/utils";
 
-const platforms = [
-  {
-    name: "Facebook",
-    description: "Get a number for Facebook account verification",
-    priceLabel: "Rs 30 per OTP",
-    icon: Tag,
-    color: "text-blue-600",
-    bgColor: "bg-blue-500/10",
-    href: "/platforms/facebook",
-  },
-  {
-    name: "Amazon",
-    description: "Get a number for Amazon account verification",
-    priceLabel: "Rs 60 per OTP",
-    icon: ShoppingBag,
-    color: "text-orange-600",
-    bgColor: "bg-orange-500/10",
-    href: "/platforms/amazon",
-  },
-  {
-    name: "Walmart",
-    description: "Get a number for Walmart account verification",
-    priceLabel: "Rs 60 per OTP",
-    icon: ShoppingBag,
-    color: "text-yellow-600",
-    bgColor: "bg-yellow-500/10",
-    href: "/platforms/walmart",
-  },
-  {
-    name: "Global US Numbers",
-    description: "Get a US number for any service",
-    priceLabel: "Rs 60 per OTP",
-    icon: Globe,
-    color: "text-green-600",
-    bgColor: "bg-green-500/10",
-    href: "/numbers",
-  },
-];
+const platformIcons = {
+  Facebook: Tag,
+  Amazon: ShoppingBag,
+  Walmart: ShoppingBag,
+  Others: Globe,
+} as const;
+
+const platformStyles = {
+  Facebook: { color: "text-blue-500", bgColor: "bg-blue-500/10", border: "border-blue-500/40" },
+  Amazon: { color: "text-orange-500", bgColor: "bg-orange-500/10", border: "border-orange-500/40" },
+  Walmart: { color: "text-amber-500", bgColor: "bg-amber-500/10", border: "border-amber-500/40" },
+  Others: { color: "text-emerald-500", bgColor: "bg-emerald-500/10", border: "border-emerald-500/40" },
+} as const;
 
 export default function PlatformsPage(): React.ReactElement {
+  const router = useRouter();
+  const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
-  const userPlatform = user?.preferredPlatform || "Facebook";
+  const setPreferredPlatform = useAuthStore((s) => s.setPreferredPlatform);
+  const savedPlatform = user?.preferredPlatform || "Facebook";
 
-  const platformMap: Record<string, string> = {
-    Facebook: "Facebook",
-    Amazon: "Amazon",
-    Walmart: "Walmart",
-    Others: "Global US Numbers",
-  };
+  const [selected, setSelected] = useState(savedPlatform);
+  const [isContinuing, setIsContinuing] = useState(false);
 
-  const selectedPlatformName = platformMap[userPlatform] || "Facebook";
-  const visiblePlatforms = platforms.filter((platform) => platform.name === selectedPlatformName);
+  useEffect(() => {
+    setSelected(savedPlatform);
+  }, [savedPlatform]);
+
+  const selectedCard =
+    PLATFORM_CARDS.find((p) => p.value === selected) ?? PLATFORM_CARDS[0];
+
+  async function handleContinue(): Promise<void> {
+    if (!token) return;
+
+    setIsContinuing(true);
+
+    if (selected !== savedPlatform) {
+      const res = await authUpdatePreferredPlatform(selected, token);
+      if (!res.success) {
+        toast.error(res.error);
+        setIsContinuing(false);
+        return;
+      }
+      setPreferredPlatform(res.data.preferredPlatform);
+    }
+
+    setIsContinuing(false);
+    router.push(selectedCard.href);
+  }
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Platform Numbers</h1>
-        <p className="text-muted-foreground">
-          Select a platform to get a dedicated number for account verification.
+    <div className="mx-auto w-full min-w-0 max-w-3xl space-y-6 pb-28">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          Choose Platform
+        </h1>
+        <p className="text-sm text-muted-foreground sm:text-base">
+          Pick where you need OTP verification. Tap a platform, then continue.
         </p>
       </div>
 
-      <div className="grid w-full min-w-0 gap-6 md:grid-cols-2">
-        {visiblePlatforms.map((platform) => (
-          <Card key={platform.name} className="group hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className={`inline-flex h-12 w-12 items-center justify-center rounded-lg ${platform.bgColor} ${platform.color} mb-4`}>
-                <platform.icon className="h-6 w-6" />
+      <div className="space-y-3" role="radiogroup" aria-label="OTP platform">
+        {PLATFORM_CARDS.map((platform) => {
+          const Icon = platformIcons[platform.value];
+          const styles = platformStyles[platform.value];
+          const isSelected = selected === platform.value;
+
+          return (
+            <button
+              key={platform.value}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              onClick={() => setSelected(platform.value)}
+              className={cn(
+                "w-full rounded-xl border p-4 text-left transition-all",
+                "hover:border-primary/40 hover:bg-secondary/30",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                isSelected
+                  ? cn("border-primary bg-primary/5 shadow-sm ring-1 ring-primary/25", styles.border)
+                  : "border-border/60 bg-card/40",
+              )}
+            >
+              <div className="flex items-center gap-4">
+                <div
+                  className={cn(
+                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg",
+                    styles.bgColor,
+                    styles.color,
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-foreground">{platform.name}</p>
+                    <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">
+                      {platform.priceLabel}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-sm text-muted-foreground line-clamp-2">
+                    {platform.description}
+                  </p>
+                </div>
+
+                <div className="shrink-0">
+                  {isSelected ? (
+                    <CheckCircle2 className="h-5 w-5 text-primary" aria-hidden />
+                  ) : (
+                    <span className="block h-5 w-5 rounded-full border-2 border-muted-foreground/30" />
+                  )}
+                </div>
               </div>
-              <CardTitle className="group-hover:text-primary transition-colors">
-                {platform.name}
-              </CardTitle>
-              <CardDescription>
-                {platform.description}
-                <span className="mt-2 block font-semibold text-foreground">{platform.priceLabel}</span>
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full">
-                <Link href={platform.href}>
-                  Get Number
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+            </button>
+          );
+        })}
       </div>
+
+      <Card className="fixed bottom-0 left-0 right-0 z-20 rounded-none border-x-0 border-b-0 border-t border-border/80 bg-background/95 backdrop-blur-md md:static md:rounded-xl md:border md:bg-card/80">
+        <CardContent className="mx-auto flex w-full max-w-3xl flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Selected
+            </p>
+            <p className="truncate font-semibold text-foreground">
+              {selectedCard.name}
+              <span className="mx-2 font-normal text-muted-foreground">·</span>
+              <span className="font-medium tabular-nums">{selectedCard.priceLabel}</span>
+            </p>
+          </div>
+          <Button
+            size="lg"
+            className="w-full shrink-0 gap-2 sm:w-auto"
+            disabled={isContinuing}
+            onClick={() => void handleContinue()}
+          >
+            <Smartphone className="h-4 w-4" />
+            {isContinuing ? "Please wait…" : "Continue to Get Number"}
+            {!isContinuing ? <ArrowRight className="h-4 w-4" /> : null}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
