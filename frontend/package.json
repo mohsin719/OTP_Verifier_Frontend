@@ -24,9 +24,9 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",
-    "next": "^16.2.6",
+    "next": "^16.2.9",
     "next-themes": "^0.4.6",
-    "postcss": "^8.4.47",
+    "postcss": "^8.5.10",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-hook-form": "^7.75.0",
@@ -41,6 +41,11 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "overrides": {
+    "postcss": "$postcss",
+    "ws": "^8.21.0",
+    "js-yaml": "^4.1.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.0.0",

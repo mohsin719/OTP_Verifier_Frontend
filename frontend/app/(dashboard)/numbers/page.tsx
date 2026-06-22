@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, memo, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, memo, useMemo, startTransition } from "react";
 import { Copy, Phone, RefreshCw, ShieldCheck, Clock, Wifi, Info } from "lucide-react";
 import { toast } from "sonner";
 import { io, type Socket } from "socket.io-client";
@@ -67,7 +67,7 @@ function secondsUntil(isoStr: string): number {
 function NumbersPage() {
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
-  const { balancePkr } = useWalletStore();
+  const { balancePkr, ownerUserId } = useWalletStore();
 
   // Use user's preferred platform from auth store
   const userPlatform = user?.preferredPlatform || "Facebook";
@@ -108,18 +108,18 @@ function NumbersPage() {
       if (refundAmountPkr && refundAmountPkr > 0) {
         adjustWallet(refundAmountPkr);
       }
-      if (token) {
-        await fetchWalletBalance(token);
+      if (token && user?.id) {
+        await fetchWalletBalance(token, user.id);
       }
     },
-    [adjustWallet, fetchWalletBalance, token],
+    [adjustWallet, fetchWalletBalance, token, user?.id],
   );
 
   const syncWalletBalance = useCallback(async () => {
-    if (token) {
-      await fetchWalletBalance(token);
+    if (token && user?.id) {
+      await fetchWalletBalance(token, user.id);
     }
-  }, [fetchWalletBalance, token]);
+  }, [fetchWalletBalance, token, user?.id]);
   const expireHandledRef = useRef<string | null>(null);
 
   const displayOtp = rawActive?.parsedOtp ?? polledOtp;
@@ -199,11 +199,11 @@ function NumbersPage() {
   }, [token, rawActive, hasReceivedOtp, clearActiveState, syncWalletAfterRefund, syncWalletBalance, refresh]);
 
   const checkBalanceRequirement = useCallback((requiredPrice: number): boolean => {
-    if (balancePkr === null) {
+    if (balancePkr === null || ownerUserId !== user?.id) {
       return false;
     }
     return balancePkr < requiredPrice;
-  }, [balancePkr]);
+  }, [balancePkr, ownerUserId, user?.id]);
 
   const openRechargePopup = useCallback((requiredPrice: number, description: string) => {
     setRechargeServicePrice(requiredPrice);
@@ -230,7 +230,7 @@ function NumbersPage() {
     setCountdown(secondsUntil(rawActive.leasedUntil));
     const tick = setInterval(() => {
       const remaining = secondsUntil(rawActive.leasedUntil);
-      setCountdown(remaining);
+      setCountdown((prev) => (prev === remaining ? prev : remaining));
 
       if (remaining <= 0 && !hasReceivedOtp) {
         void handleLeaseExpired();
@@ -284,12 +284,14 @@ function NumbersPage() {
       setWsUnavailable(true);
     };
     const onOtpReceived = (payload?: { otp?: string }) => {
-      if (payload?.otp) {
-        setPolledOtp(payload.otp);
-      }
+      startTransition(() => {
+        if (payload?.otp) {
+          setPolledOtp(payload.otp);
+        }
+        setOtpFlash(true);
+      });
       void refresh();
-      setOtpFlash(true);
-      setTimeout(() => setOtpFlash(false), 2500);
+      window.setTimeout(() => setOtpFlash(false), 2500);
       toast.success("OTP received!", { duration: 4000 });
     };
 

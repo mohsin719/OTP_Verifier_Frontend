@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApi } from "@/hooks/use-api";
+import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
 
 type TxRow = {
@@ -16,7 +17,8 @@ type TxRow = {
 };
 
 export default function WalletPage(): React.ReactElement {
-  const { balancePkr, isLoading, setBalance } = useWalletStore();
+  const user = useAuthStore((s) => s.user);
+  const { balancePkr, isLoading, setBalance, ownerUserId } = useWalletStore();
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
 
@@ -32,10 +34,10 @@ export default function WalletPage(): React.ReactElement {
   const total = txData?.total ?? 0;
 
   useEffect(() => {
-    if (walletData) {
-      setBalance(walletData.balancePkr);
+    if (walletData && user?.id) {
+      setBalance(walletData.balancePkr, user.id);
     }
-  }, [walletData, setBalance]);
+  }, [walletData, setBalance, user?.id]);
 
   const pkrBalanceFormatter = new Intl.NumberFormat("en-PK", {
     style: "currency",
@@ -59,7 +61,7 @@ export default function WalletPage(): React.ReactElement {
           <CardTitle>Current balance</CardTitle>
         </CardHeader>
         <CardContent>
-          {balancePkr === null || isLoading ? (
+          {balancePkr === null || isLoading || ownerUserId !== user?.id ? (
             <Skeleton className="h-10 w-40" />
           ) : (
             <p className="text-3xl font-semibold tabular-nums">

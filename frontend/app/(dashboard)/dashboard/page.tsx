@@ -12,7 +12,7 @@ import { useApi } from "@/hooks/use-api";
 export default function DashboardPage(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === "ADMIN";
-  const { balancePkr, isLoading } = useWalletStore();
+  const { balancePkr, isLoading, ownerUserId } = useWalletStore();
   const { data: adminStats, isLoading: statsLoading } = useApi<{ totalUsers: number }>(
     isAdmin ? "/api/manage/stats" : null,
     { cacheTtlMs: 30_000 },
@@ -66,7 +66,7 @@ export default function DashboardPage(): React.ReactElement {
             <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Available Balance</CardTitle>
           </CardHeader>
           <CardContent>
-            {balancePkr === null || isLoading ? (
+            {balancePkr === null || isLoading || ownerUserId !== user?.id ? (
               <Skeleton className="h-10 w-40 mt-1" />
             ) : (
               <div className="flex items-baseline space-x-2">

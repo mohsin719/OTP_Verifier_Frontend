@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { AuthUser } from "@/lib/auth-types";
 import { authLogout, authRefresh } from "@/lib/api";
+import { useWalletStore } from "@/stores/wallet-store";
 
 export type { AuthUser };
 
@@ -21,6 +22,8 @@ type AuthState = {
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
   restoreSession: () => Promise<boolean>;
+  /** Try httpOnly cookie when localStorage has no session (login/dashboard entry). */
+  restoreFromCookie: () => Promise<boolean>;
   setHydrated: (value: boolean) => void;
 };
 
@@ -67,7 +70,17 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       hydrated: false,
       sessionRevoked: false,
-      setAuth: (token, user) => set({ token, user, sessionRevoked: false }),
+      setAuth: (token, user) => {
+        const prevUserId = get().user?.id;
+        const walletOwnerId = useWalletStore.getState().ownerUserId;
+        if (
+          (prevUserId && prevUserId !== user.id) ||
+          (walletOwnerId && walletOwnerId !== user.id)
+        ) {
+          useWalletStore.getState().invalidate();
+        }
+        set({ token, user, sessionRevoked: false });
+      },
       setPreferredPlatform: (platform) =>
         set((state) => ({
           user: state.user
@@ -76,6 +89,7 @@ export const useAuthStore = create<AuthState>()(
         })),
       logout: async () => {
         const accessToken = get().token;
+        useWalletStore.getState().invalidate();
         set({ sessionRevoked: true, token: null, user: null });
         try {
           await authLogout(accessToken);
@@ -98,20 +112,40 @@ export const useAuthStore = create<AuthState>()(
         }
 
         const { token, user } = get();
-        if (token && user) {
-          const refreshed = await refreshWithRetries();
-          if (refreshed.ok) {
-            set({ token: refreshed.accessToken, user: refreshed.user });
-            return true;
+        if (!token || !user) {
+          return false;
+        }
+
+        const refreshed = await refreshWithRetries();
+        if (refreshed.ok) {
+          const prevUserId = get().user?.id;
+          if (prevUserId && prevUserId !== refreshed.user.id) {
+            useWalletStore.getState().invalidate();
           }
-          // Keep existing session on transient network errors.
+          set({ token: refreshed.accessToken, user: refreshed.user });
           return true;
+        }
+
+        useWalletStore.getState().invalidate();
+        set({ token: null, user: null });
+        return false;
+      },
+      restoreFromCookie: async () => {
+        if (get().sessionRevoked) {
+          return false;
+        }
+
+        const { token, user } = get();
+        if (token && user) {
+          return get().restoreSession();
         }
 
         const refreshed = await refreshWithRetries();
         if (!refreshed.ok) {
           return false;
         }
+
+        useWalletStore.getState().invalidate();
         set({ token: refreshed.accessToken, user: refreshed.user });
         return true;
       },

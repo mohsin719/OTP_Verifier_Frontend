@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 
 /**
- * Waits for persisted auth + cookie refresh before rendering protected UI.
+ * Waits for persisted auth before rendering guest-only UI (login/register).
+ * Only calls refresh when localStorage already has a session.
  */
 export function useSessionRestore(): {
   ready: boolean;
@@ -21,7 +22,11 @@ export function useSessionRestore(): {
   useEffect(() => {
     if (!hydrated) return;
     void (async () => {
-      await useAuthStore.getState().restoreSession();
+      const state = useAuthStore.getState();
+      // Guests with no saved session: skip refresh API (avoids 401 console noise).
+      if (!state.sessionRevoked && state.token && state.user) {
+        await useAuthStore.getState().restoreSession();
+      }
       setReady(true);
     })();
   }, [hydrated]);

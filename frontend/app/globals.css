@@ -1137,3 +1137,17 @@ body {
   color: var(--ps-glow);
   transform: translateX(2px);
 }
+
+@keyframes global-route-loader {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.global-route-loader {
+  animation: global-route-loader 0.9s ease-in-out infinite;
+  transform-origin: left center;
+}

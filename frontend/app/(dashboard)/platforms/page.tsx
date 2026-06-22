@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowRight, CheckCircle2, Globe, ShoppingBag, Smartphone, Tag } from "lucide-react";
+import { ArrowRight, CheckCircle2, Globe, Info, ShoppingBag, Smartphone, Tag } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { authUpdatePreferredPlatform } from "@/lib/api";
-import { PLATFORM_CARDS } from "@/lib/platforms";
+import { PLATFORM_CARDS, formatCooldownDuration } from "@/lib/platforms";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +41,7 @@ export default function PlatformsPage(): React.ReactElement {
 
   const selectedCard =
     PLATFORM_CARDS.find((p) => p.value === selected) ?? PLATFORM_CARDS[0];
+  const selectedCooldown = formatCooldownDuration(selectedCard.cooldownHours);
 
   async function handleContinue(): Promise<void> {
     if (!token) return;
@@ -69,6 +70,19 @@ export default function PlatformsPage(): React.ReactElement {
         </h1>
         <p className="text-sm text-muted-foreground sm:text-base">
           Pick where you need OTP verification. Tap a platform, then continue.
+        </p>
+      </div>
+
+      <div className="flex gap-2.5 rounded-lg border border-border/60 bg-secondary/20 px-4 py-3 text-sm text-muted-foreground">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+        <p>
+          OTP pricing is shown on <strong className="text-foreground">Get Number</strong>.
+          {" "}If you change platform while a number is still active, use{" "}
+          <strong className="text-foreground">Switch</strong> on Get Number to release it
+          and get a new one. After a number receives an OTP, it cannot be used again for
+          the same platform for{" "}
+          <strong className="text-foreground">{selectedCooldown}</strong> (for{" "}
+          {selectedCard.name}).
         </p>
       </div>
 
@@ -106,12 +120,7 @@ export default function PlatformsPage(): React.ReactElement {
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-foreground">{platform.name}</p>
-                    <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">
-                      {platform.priceLabel}
-                    </span>
-                  </div>
+                  <p className="font-semibold text-foreground">{platform.name}</p>
                   <p className="mt-0.5 text-sm text-muted-foreground line-clamp-2">
                     {platform.description}
                   </p>
@@ -138,8 +147,6 @@ export default function PlatformsPage(): React.ReactElement {
             </p>
             <p className="truncate font-semibold text-foreground">
               {selectedCard.name}
-              <span className="mx-2 font-normal text-muted-foreground">·</span>
-              <span className="font-medium tabular-nums">{selectedCard.priceLabel}</span>
             </p>
           </div>
           <Button

@@ -62,13 +62,14 @@ export function DashboardShell({
   const pathname = usePathname();
   const router = useRouter();
   const { token, user, hydrated, setAuth } = useAuthStore();
-  const { balancePkr, lastFetchedAt, setBalance, setLoading } = useWalletStore();
+  const { balancePkr, ownerUserId, lastFetchedAt, fetchBalance, hydrateFromCache, invalidate, setLoading } =
+    useWalletStore();
   const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
     if (!hydrated) return;
     void (async () => {
-      await useAuthStore.getState().restoreSession();
+      await useAuthStore.getState().restoreFromCookie();
       setSessionReady(true);
     })();
   }, [hydrated]);
@@ -83,43 +84,34 @@ export function DashboardShell({
   useEffect(() => {
     if (!sessionReady || !token || !user) return;
 
-    const now = Date.now();
-    if (lastFetchedAt && now - lastFetchedAt < WALLET_CACHE_TTL_MS) return;
+    if (ownerUserId && ownerUserId !== user.id) {
+      invalidate();
+    }
 
-    const cached = localStorage.getItem("wallet_balance_cache");
-    if (cached && lastFetchedAt !== null) {
-      try {
-        const { balance, timestamp } = JSON.parse(cached) as {
-          balance: number;
-          timestamp: number;
-        };
-        if (now - timestamp < WALLET_CACHE_TTL_MS) {
-          setBalance(balance);
-          setLoading(false);
-          return;
-        }
-      } catch {
-        // ignore
-      }
+    const now = Date.now();
+    const wallet = useWalletStore.getState();
+    if (
+      wallet.ownerUserId === user.id &&
+      wallet.lastFetchedAt &&
+      now - wallet.lastFetchedAt < WALLET_CACHE_TTL_MS
+    ) {
+      return;
     }
 
     setLoading(true);
-    void (async () => {
-      try {
-        const res = await apiFetch<{ balancePkr: number }>("/api/wallet", {
-          accessToken: token,
-          disableDedupe: true,
-        });
-        if (res.success) {
-          setBalance(res.data.balancePkr);
-        }
-      } catch (error) {
-        console.error("Failed to fetch balance:", error);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [sessionReady, token, user, lastFetchedAt, setBalance, setLoading]);
+    hydrateFromCache(user.id, WALLET_CACHE_TTL_MS);
+    void fetchBalance(token, user.id);
+  }, [
+    sessionReady,
+    token,
+    user,
+    ownerUserId,
+    lastFetchedAt,
+    fetchBalance,
+    hydrateFromCache,
+    invalidate,
+    setLoading,
+  ]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -158,7 +150,7 @@ export function DashboardShell({
 
   useEffect(() => {
     const onUnauthorized = () => {
-      void useAuthStore.getState().restoreSession();
+      void useAuthStore.getState().restoreFromCookie();
     };
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
@@ -193,7 +185,7 @@ export function DashboardShell({
   });
 
   const balanceLabel =
-    balancePkr === null
+    balancePkr === null || ownerUserId !== user?.id
       ? "—"
       : `${pkrFormatter.format(balancePkr)} PKR`;
 
@@ -209,7 +201,7 @@ export function DashboardShell({
         pathname={pathname}
         showWallet={!showAdmin}
         balanceLabel={balanceLabel}
-        balanceLoading={balancePkr === null}
+        balanceLoading={balancePkr === null || ownerUserId !== user.id}
         onAddBalance={() => setShowRechargeModal(true)}
         user={user}
         profileHref={profileHref}
@@ -258,7 +250,7 @@ export function DashboardShell({
               <div className="mobile-menu-panel__footer">
                 <PremiumSidebarWallet
                   balanceLabel={balanceLabel}
-                  loading={balancePkr === null}
+                  loading={balancePkr === null || ownerUserId !== user.id}
                 />
                 <PremiumSidebarAddBalance
                   onClick={() => {

@@ -18,8 +18,16 @@ export function SessionKeeper(): null {
   }, [hydrated]);
 
   useEffect(() => {
-    const syncSession = () => {
+    const runSync = () => {
       void useAuthStore.getState().restoreSession();
+    };
+
+    const syncSession = () => {
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(runSync, { timeout: 2500 });
+        return;
+      }
+      window.setTimeout(runSync, 0);
     };
 
     const intervalId = window.setInterval(syncSession, REFRESH_INTERVAL_MS);

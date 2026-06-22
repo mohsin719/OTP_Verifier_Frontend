@@ -58,6 +58,12 @@ export default function AdminDashboardPage() {
     }
   }
 
+  const [chartReady, setChartReady] = React.useState(false);
+
+  React.useEffect(() => {
+    setChartReady(true);
+  }, []);
+
   React.useEffect(() => {
     if (!error) {
       return;
@@ -132,9 +138,9 @@ export default function AdminDashboardPage() {
             <CardDescription>Aggregate metrics for user acquisition and system load</CardDescription>
           </CardHeader>
           <CardContent>
-            {stats && chartData.length > 0 ? (
-            <div className="h-80 min-h-[320px] min-w-0 w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
+            {chartReady && stats && chartData.length > 0 ? (
+            <div className="mt-4 h-[320px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="oklch(1 0 0 / 0.1)" />
                   <XAxis dataKey="name" stroke="oklch(0.65 0.03 260)" tickLine={false} axisLine={false} dy={10} />
