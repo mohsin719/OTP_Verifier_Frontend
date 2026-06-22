@@ -36,7 +36,7 @@ export function PremiumSidebarHeader({
           >
             <div className="premium-sidebar__logo-ring-inner">
               <Image
-                src="/favicon-32x32.png"
+                src="/brand/logo.png"
                 alt="US Num Hub"
                 width={32}
                 height={32}
@@ -77,7 +77,7 @@ export function MobileDashboardNavbar({
       <Link href={href} prefetch={false} className="mobile-nav__brand">
         <span className="mobile-nav__logo">
           <Image
-            src="/favicon-32x32.png"
+            src="/brand/logo.png"
             alt="US Num Hub"
             width={28}
             height={28}
