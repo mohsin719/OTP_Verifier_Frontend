@@ -39,6 +39,8 @@ type ActiveNumber = {
 
 const DEFAULT_FACEBOOK_PRICE_PKR = 30;
 const OTHER_SERVICE_PRICE_PKR = 60;
+/** Must match backend NUMBER_LEASE_GRACE_SECONDS — keeps polling after countdown hits 0 */
+const LEASE_EXPIRE_GRACE_SEC = 45;
 
 function normalizeServiceType(rawPlatform: string | null): string {
   if (!rawPlatform) {
@@ -126,15 +128,16 @@ function NumbersPage() {
   const hasReceivedOtp =
     rawActive?.otpStatus === "RECEIVED" || Boolean(displayOtp);
 
-  /** Hide expired leases without OTP even if SWR still has stale data */
+  /** Hide expired leases without OTP after grace window */
   const active = useMemo(() => {
     if (!rawActive) {
       return null;
     }
-    const expired =
-      Boolean(rawActive.leasedUntil) &&
-      secondsUntil(rawActive.leasedUntil) <= 0;
-    if (expired && !hasReceivedOtp) {
+    const remaining = rawActive.leasedUntil
+      ? secondsUntil(rawActive.leasedUntil)
+      : 0;
+    const pastGrace = remaining <= -LEASE_EXPIRE_GRACE_SEC;
+    if (pastGrace && !hasReceivedOtp) {
       return null;
     }
     return rawActive;
@@ -163,10 +166,52 @@ function NumbersPage() {
       return;
     }
 
+    const remaining = rawActive.leasedUntil
+      ? secondsUntil(rawActive.leasedUntil)
+      : 0;
+    if (remaining > -LEASE_EXPIRE_GRACE_SEC) {
+      return;
+    }
+
     const leaseKey = rawActive.otpRequestId || rawActive.e164;
     if (expireHandledRef.current === leaseKey) {
       return;
     }
+
+    // Final sync before release — catches OTP that landed at the last second
+    try {
+      const pollRes = await apiFetch<{ status: string; otp?: string }>(
+        `/api/otp/poll?number=${encodeURIComponent(rawActive.e164)}`,
+        { accessToken: token, disableDedupe: true, cacheTtlMs: 0 },
+      );
+      if (pollRes.success && pollRes.data?.status === "received" && pollRes.data.otp) {
+        setPolledOtp(pollRes.data.otp);
+        await refresh();
+        return;
+      }
+      if (rawActive.otpRequestId) {
+        const statusRes = await apiFetch<{
+          status: string;
+          otpCode: string | null;
+        }>(`/api/otp/status/${rawActive.otpRequestId}`, {
+          accessToken: token,
+          disableDedupe: true,
+          cacheTtlMs: 0,
+        });
+        if (
+          statusRes.success &&
+          statusRes.data?.otpCode &&
+          statusRes.data.status === "RECEIVED"
+        ) {
+          setPolledOtp(statusRes.data.otpCode);
+          await refresh();
+          return;
+        }
+      }
+    } catch {
+      /* proceed with expire cleanup */
+    }
+
     expireHandledRef.current = leaseKey;
 
     setShowChangeNumberDialog(false);
@@ -232,7 +277,7 @@ function NumbersPage() {
       const remaining = secondsUntil(rawActive.leasedUntil);
       setCountdown((prev) => (prev === remaining ? prev : remaining));
 
-      if (remaining <= 0 && !hasReceivedOtp) {
+      if (remaining <= -LEASE_EXPIRE_GRACE_SEC && !hasReceivedOtp) {
         void handleLeaseExpired();
       }
     }, 1000);
@@ -373,7 +418,7 @@ function NumbersPage() {
       }
     };
     void doPoll();
-    pollRef.current = setInterval(() => void doPoll(), 3000);
+    pollRef.current = setInterval(() => void doPoll(), 1500);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = null;
