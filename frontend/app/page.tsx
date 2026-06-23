@@ -1,31 +1,14 @@
 import type { ReactElement, ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Shield, Zap, Smartphone } from "lucide-react";
+import { Shield, Zap, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BrandLogo } from "@/components/brand/brand-logo";
+import { PublicFooter } from "@/components/layout/public-footer";
+import { PublicHeader } from "@/components/layout/public-header";
 
 export default function LandingPage(): ReactElement {
   return (
     <div className="flex min-h-screen w-full min-w-0 flex-col overflow-x-hidden">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background">
-        <div className="mx-auto flex h-16 w-full min-w-0 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <BrandLogo href="/" imageClassName="h-9 w-9" />
-          <nav className="flex items-center gap-4">
-            <Link
-              href="/login"
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              Log in
-            </Link>
-            <Button asChild size="sm">
-              <Link href="/register">
-                Get started
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Link>
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <PublicHeader />
       <main className="flex flex-1 flex-col">
         <section className="mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-10 px-4 py-16 sm:px-6 sm:py-20 md:flex-row md:items-center md:py-32">
           <div className="flex-1 space-y-6">
@@ -63,9 +46,7 @@ export default function LandingPage(): ReactElement {
           </div>
         </section>
       </main>
-      <footer className="border-t border-border py-8 text-center text-sm text-muted-foreground">
-        US Num Hub — Virtual SMS verification platform
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

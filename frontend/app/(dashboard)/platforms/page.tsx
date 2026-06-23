@@ -3,11 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowRight, CheckCircle2, Globe, Info, ShoppingBag, Smartphone, Tag } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { ArrowRight, CheckCircle2, Globe, ShoppingBag, Smartphone, Tag, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { authUpdatePreferredPlatform } from "@/lib/api";
-import { PLATFORM_CARDS, formatCooldownDuration } from "@/lib/platforms";
+import { PLATFORM_CARDS } from "@/lib/platforms";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +40,6 @@ export default function PlatformsPage(): React.ReactElement {
 
   const selectedCard =
     PLATFORM_CARDS.find((p) => p.value === selected) ?? PLATFORM_CARDS[0];
-  const selectedCooldown = formatCooldownDuration(selectedCard.cooldownHours);
 
   async function handleContinue(): Promise<void> {
     if (!token) return;
@@ -73,16 +71,16 @@ export default function PlatformsPage(): React.ReactElement {
         </p>
       </div>
 
-      <div className="flex gap-2.5 rounded-lg border border-border/60 bg-secondary/20 px-4 py-3 text-sm text-muted-foreground">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+      <div
+        className="flex gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90"
+        role="alert"
+      >
+        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden />
         <p>
-          OTP pricing is shown on <strong className="text-foreground">Get Number</strong>.
-          {" "}If you change platform while a number is still active, use{" "}
-          <strong className="text-foreground">Switch</strong> on Get Number to release it
-          and get a new one. After a number receives an OTP, it cannot be used again for
-          the same platform for{" "}
-          <strong className="text-foreground">{selectedCooldown}</strong> (for{" "}
-          {selectedCard.name}).
+          <strong className="text-amber-50">Important Notice:</strong> OTPs are issued
+          only for the selected platform. Please double-check your selection before
+          continuing. If the wrong platform is selected, any resulting OTP failure is
+          the buyer&apos;s responsibility.
         </p>
       </div>
 
@@ -139,28 +137,75 @@ export default function PlatformsPage(): React.ReactElement {
         })}
       </div>
 
-      <Card className="fixed bottom-0 left-0 right-0 z-20 rounded-none border-x-0 border-b-0 border-t border-border/80 bg-background/95 backdrop-blur-md md:static md:rounded-xl md:border md:bg-card/80">
-        <CardContent className="mx-auto flex w-full max-w-3xl flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Selected
-            </p>
-            <p className="truncate font-semibold text-foreground">
-              {selectedCard.name}
-            </p>
+      <PlatformActionFooter
+        selectedCard={selectedCard}
+        isContinuing={isContinuing}
+        onContinue={() => void handleContinue()}
+      />
+    </div>
+  );
+}
+
+function PlatformActionFooter({
+  selectedCard,
+  isContinuing,
+  onContinue,
+}: {
+  selectedCard: (typeof PLATFORM_CARDS)[number];
+  isContinuing: boolean;
+  onContinue: () => void;
+}): React.ReactElement {
+  const Icon = platformIcons[selectedCard.value];
+  const styles = platformStyles[selectedCard.value];
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-20 md:static">
+      <div className="border-t border-border/60 bg-background/95 backdrop-blur-md md:rounded-2xl md:border md:bg-card/60 md:shadow-sm">
+        <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-5">
+          <p className="text-center text-xs leading-relaxed text-muted-foreground sm:text-left">
+            OTP pricing is shown on{" "}
+            <strong className="font-medium text-foreground">Get Number</strong>. If you
+            change platform while a number is active, use{" "}
+            <strong className="font-medium text-foreground">Switch</strong> on Get Number
+            to release it and get a new one.
+          </p>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+            <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-border/50 bg-secondary/25 px-4 py-3">
+              <div
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+                  styles.bgColor,
+                  styles.color,
+                )}
+              >
+                <Icon className="h-5 w-5" aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Selected platform
+                </p>
+                <p className="truncate text-base font-semibold text-foreground">
+                  {selectedCard.name}
+                </p>
+              </div>
+            </div>
+
+            <Button
+              size="lg"
+              className="h-auto min-h-12 w-full gap-2 px-6 py-3 text-base font-semibold sm:w-auto sm:min-w-[220px]"
+              disabled={isContinuing}
+              onClick={onContinue}
+            >
+              <Smartphone className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                {isContinuing ? "Please wait…" : "Continue"}
+              </span>
+              {!isContinuing ? <ArrowRight className="h-4 w-4 shrink-0" /> : null}
+            </Button>
           </div>
-          <Button
-            size="lg"
-            className="w-full shrink-0 gap-2 sm:w-auto"
-            disabled={isContinuing}
-            onClick={() => void handleContinue()}
-          >
-            <Smartphone className="h-4 w-4" />
-            {isContinuing ? "Please wait…" : "Continue to Get Number"}
-            {!isContinuing ? <ArrowRight className="h-4 w-4" /> : null}
-          </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
