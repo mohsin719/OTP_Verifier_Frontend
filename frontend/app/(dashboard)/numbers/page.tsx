@@ -351,6 +351,8 @@ function NumbersPage() {
     const awaitingOtp =
       active?.otpStatus !== "EXPIRED" &&
       active?.otpStatus !== "FAILED" &&
+      active?.otpStatus !== "RECEIVED" &&
+      !hasReceivedOtp &&
       !active?.parsedOtp &&
       !polledOtp &&
       Boolean(active?.e164);
@@ -419,6 +421,7 @@ function NumbersPage() {
     active?.otpStatus,
     active?.parsedOtp,
     polledOtp,
+    hasReceivedOtp,
   ]);
 
   // Silent background sync — fixed 10s interval, no Refresh Status button disruption.
@@ -441,6 +444,8 @@ function NumbersPage() {
     const awaitingOtp =
       active?.otpStatus !== "EXPIRED" &&
       active?.otpStatus !== "FAILED" &&
+      active?.otpStatus !== "RECEIVED" &&
+      !hasReceivedOtp &&
       !active?.parsedOtp &&
       !polledOtp;
 
@@ -498,7 +503,7 @@ function NumbersPage() {
         abortControllerRef.current = null;
       }
     };
-  }, [active?.e164, active?.otpStatus, active?.parsedOtp, polledOtp, token, revalidateActive]);
+  }, [active?.e164, active?.otpStatus, active?.parsedOtp, polledOtp, hasReceivedOtp, token, revalidateActive]);
 
   const previousE164Ref = useRef<string | null>(null);
   useEffect(() => {
