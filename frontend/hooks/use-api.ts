@@ -16,7 +16,9 @@ export function useApi<T>(
     });
 
     if (!res.success) {
-      console.error(`Fetch Error for ${url}:`, res.error);
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`API request failed for ${url}:`, res.error);
+      }
       // Throw so SWR keeps previous data during background revalidation.
       throw new Error(res.error);
     }
@@ -32,6 +34,9 @@ export function useApi<T>(
     revalidateOnMount: true,
     keepPreviousData: true,
     dedupingInterval: 2000,
+    shouldRetryOnError: true,
+    errorRetryCount: 3,
+    errorRetryInterval: 5000,
     ...options,
   });
 }

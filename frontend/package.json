@@ -6,6 +6,7 @@
     "dev": "next dev -p 3000 --webpack",
     "dev:turbo": "next dev -p 3000 --turbopack",
     "build": "next build && node scripts/post-export.mjs",
+    "build:hostinger": "node scripts/build-hostinger.mjs",
     "start": "npx serve out -p 3000",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0"

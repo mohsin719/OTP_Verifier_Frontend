@@ -1,18 +1,19 @@
-"use client";
-
+import type { Metadata } from "next";
 import type { ReactElement } from "react";
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { SessionKeeper } from "@/components/auth/session-keeper";
+import { DashboardLayoutClient } from "./dashboard-layout-client";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: { index: false, follow: false },
+  },
+};
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }): ReactElement {
-  return (
-    <DashboardShell>
-      <SessionKeeper />
-      <div className="page-content">{children}</div>
-    </DashboardShell>
-  );
+  return <DashboardLayoutClient>{children}</DashboardLayoutClient>;
 }

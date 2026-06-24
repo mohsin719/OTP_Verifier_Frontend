@@ -9,7 +9,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const ts = new Date();
   return [
     { url: `${root}/`, lastModified: ts, changeFrequency: "weekly", priority: 1 },
-    { url: `${root}/login`, lastModified: ts, changeFrequency: "monthly", priority: 0.6 },
-    { url: `${root}/register`, lastModified: ts, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${root}/login/`, lastModified: ts, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${root}/register/`, lastModified: ts, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${root}/policies/`, lastModified: ts, changeFrequency: "yearly", priority: 0.4 },
   ];
 }

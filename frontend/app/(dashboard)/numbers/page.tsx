@@ -27,6 +27,13 @@ import { useApi } from "@/hooks/use-api";
 import { getPublicEnv } from "@/lib/env";
 import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
+import { PlatformBanner } from "@/components/platform/platform-banner";
+import {
+  getPlatformVisual,
+  serviceTypeToPlatform,
+  type PlatformOption,
+} from "@/lib/platforms";
+import { cn } from "@/lib/utils";
 
 type ActiveNumber = {
   e164: string;
@@ -75,8 +82,9 @@ function NumbersPage() {
   const { balancePkr, ownerUserId } = useWalletStore();
 
   // Use user's preferred platform from auth store
-  const userPlatform = user?.preferredPlatform || "Facebook";
-  const serviceType = normalizeServiceType(userPlatform);
+  const selectedPlatform = serviceTypeToPlatform(user?.preferredPlatform || "Facebook");
+  const selectedPlatformVisual = getPlatformVisual(selectedPlatform);
+  const serviceType = normalizeServiceType(selectedPlatform);
   const servicePrice = getServicePricePkr(serviceType);
 
   const {
@@ -119,15 +127,12 @@ function NumbersPage() {
   const showInitialSkeleton = isLoading && !rawActive;
   const fetchWalletBalance = useWalletStore((s) => s.fetchBalance);
 
-  const syncWalletAfterRefund = useCallback(
-    async (_refundAmountPkr?: number | null) => {
-      // Always trust server balance — never optimistic add (prevents double-count in UI).
-      if (token && user?.id) {
-        await fetchWalletBalance(token, user.id);
-      }
-    },
-    [fetchWalletBalance, token, user?.id],
-  );
+  const syncWalletAfterRefund = useCallback(async () => {
+    // Always trust server balance — never optimistic add (prevents double-count in UI).
+    if (token && user?.id) {
+      await fetchWalletBalance(token, user.id);
+    }
+  }, [fetchWalletBalance, token, user?.id]);
 
   const syncWalletBalance = useCallback(async () => {
     if (token && user?.id) {
@@ -167,6 +172,13 @@ function NumbersPage() {
   const activeServiceType = rawActive?.serviceType
     ? normalizeServiceType(rawActive.serviceType)
     : null;
+  const activePlatform: PlatformOption = active?.serviceType
+    ? serviceTypeToPlatform(active.serviceType)
+    : activeServiceType
+      ? serviceTypeToPlatform(activeServiceType)
+      : selectedPlatform;
+  const displayPlatform = active ? activePlatform : selectedPlatform;
+  const displayPlatformVisual = getPlatformVisual(displayPlatform);
   const platformMismatch =
     Boolean(rawActive) &&
     !hasReceivedOtp &&
@@ -581,7 +593,7 @@ function NumbersPage() {
       assignActiveNumber(res.data);
       toast.success(
         platformMismatch
-          ? `Switched to ${userPlatform}. Your previous number was cancelled and refunded.`
+          ? `Switched to ${selectedPlatformVisual.displayName}. Your previous number was cancelled and refunded.`
           : "Number changed successfully! New number assigned.",
       );
       return true;
@@ -600,7 +612,7 @@ function NumbersPage() {
     openRechargePopup,
     assignActiveNumber,
     platformMismatch,
-    userPlatform,
+    selectedPlatformVisual.displayName,
   ]);
 
   const acquire = useCallback(async () => {
@@ -748,7 +760,7 @@ function NumbersPage() {
         expireHandledRef.current = null;
         await clearActiveState(true);
         if (res.data?.refunded && res.data.refundAmountPkr) {
-          await syncWalletAfterRefund(res.data.refundAmountPkr);
+          await syncWalletAfterRefund();
           toast.success(
             `Number cancelled. PKR ${res.data.refundAmountPkr} has been refunded to your wallet.`,
           );
@@ -856,17 +868,29 @@ function NumbersPage() {
     countdown > 60  ? "text-amber-400"   :
                       "text-red-400";
 
+  const DisplayPlatformIcon = displayPlatformVisual.Icon;
+
   return (
     <div className="mx-auto w-full min-w-0 max-w-2xl space-y-6">
       {/* Header */}
-      <div className="space-y-1">
-        <h1 className="flex flex-wrap items-center gap-2 font-bold tracking-tight sm:gap-3">
-          <Phone className="h-6 w-6 shrink-0 text-primary sm:h-7 sm:w-7" />
-          Virtual US Number
-        </h1>
-        <p className="text-muted-foreground">
-          Lease a temporary US number and receive OTP codes in real time.
-        </p>
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <h1 className="flex flex-wrap items-center gap-2 font-bold tracking-tight sm:gap-3">
+            <Phone className="h-6 w-6 shrink-0 text-primary sm:h-7 sm:w-7" />
+            Virtual US Number
+          </h1>
+          <p className="text-muted-foreground">
+            Lease a temporary US number for{" "}
+            <strong className="text-foreground">{displayPlatformVisual.displayName}</strong>{" "}
+            verification and receive OTP codes in real time.
+          </p>
+        </div>
+
+        <PlatformBanner
+          platform={displayPlatform}
+          mode={active ? "active" : "selected"}
+          pricePkr={servicePrice}
+        />
       </div>
 
       {/* Active Number Card */}
@@ -904,9 +928,12 @@ function NumbersPage() {
         <CardContent className="space-y-5">
           {platformMismatch && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-              You switched to <strong className="text-amber-100">{userPlatform}</strong>.
+              You switched to{" "}
+              <strong className="text-amber-100">{selectedPlatformVisual.displayName}</strong>.
               Your current number was leased for a different platform. Tap{" "}
-              <strong className="text-amber-100">Switch to {userPlatform}</strong>{" "}
+              <strong className="text-amber-100">
+                Switch to {selectedPlatformVisual.displayName}
+              </strong>{" "}
               below to cancel it, get your refund, and receive a new number.
             </div>
           )}
@@ -926,11 +953,31 @@ function NumbersPage() {
               {/* Phone Number Display */}
               <div className="rounded-xl border border-border/60 bg-secondary/20 p-3 sm:p-4 space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">US Number</p>
-                    <p className="text-xl sm:text-2xl font-bold font-mono tracking-wide text-foreground break-all">
-                      {active.e164}
-                    </p>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                          displayPlatformVisual.border,
+                          displayPlatformVisual.bgColor,
+                          displayPlatformVisual.color,
+                        )}
+                      >
+                        <DisplayPlatformIcon className="h-3.5 w-3.5" />
+                        {displayPlatformVisual.displayName}
+                      </span>
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Platform
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">
+                        US Number
+                      </p>
+                      <p className="text-xl sm:text-2xl font-bold font-mono tracking-wide text-foreground break-all">
+                        {active.e164}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
                     <Badge
@@ -1013,7 +1060,10 @@ function NumbersPage() {
                     {active.otpStatus === "PENDING" && (
                       <div className="min-w-0 space-y-1.5 text-center text-xs text-muted-foreground sm:text-left">
                         <p>
-                          Awaiting {expectedOtpLength}-digit SMS… ({userPlatform || "generic"})
+                          Awaiting {expectedOtpLength}-digit SMS from{" "}
+                          <strong className={displayPlatformVisual.color}>
+                            {displayPlatformVisual.displayName}
+                          </strong>
                         </p>
                         <p className="text-amber-400/80 flex items-start justify-center gap-1 sm:justify-start">
                           <Info className="mt-0.5 h-3 w-3 shrink-0" />
@@ -1089,13 +1139,24 @@ function NumbersPage() {
             </>
           ) : (
             <div className="py-8 text-center space-y-4">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary/30 border border-border/50">
-                <Phone className="h-8 w-8 text-muted-foreground" />
+              <div
+                className={cn(
+                  "mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border",
+                  displayPlatformVisual.border,
+                  displayPlatformVisual.bgColor,
+                  displayPlatformVisual.color,
+                )}
+              >
+                <DisplayPlatformIcon className="h-8 w-8" />
               </div>
               <div className="space-y-1">
                 <p className="font-medium">No active number</p>
                 <p className="text-sm text-muted-foreground">
-                  Get a temporary US number to receive SMS OTP codes.
+                  Get a US number for{" "}
+                  <strong className="text-foreground">
+                    {displayPlatformVisual.displayName}
+                  </strong>{" "}
+                  verification.
                 </p>
               </div>
             </div>
@@ -1119,10 +1180,10 @@ function NumbersPage() {
                 <>
                   <Phone className="h-4 w-4" />
                   {platformMismatch
-                    ? `Switch to ${userPlatform} (Rs ${servicePrice})`
+                    ? `Switch to ${selectedPlatformVisual.displayName} (Rs ${servicePrice})`
                     : sessionComplete
-                      ? `Get New Number (Rs ${servicePrice})`
-                      : `Get US Number (Rs ${servicePrice})`}
+                      ? `Get New ${displayPlatformVisual.displayName} Number (Rs ${servicePrice})`
+                      : `Get ${displayPlatformVisual.displayName} Number (Rs ${servicePrice})`}
                 </>
               )}
             </Button>
@@ -1137,13 +1198,23 @@ function NumbersPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm font-medium text-foreground">
-            Service Charge: Rs {servicePrice} per OTP
+            Service Charge: Rs {servicePrice} per OTP on {displayPlatformVisual.displayName}
           </p>
           <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside pl-0.5">
-            <li>Click <strong className="text-foreground">Get US Number</strong> to lease a temporary number</li>
-            <li>Copy the number and paste it on Facebook / your platform&apos;s signup page</li>
+            <li>
+              Click{" "}
+              <strong className="text-foreground">
+                Get {displayPlatformVisual.displayName} Number
+              </strong>{" "}
+              to lease a temporary number
+            </li>
+            <li>
+              Copy the number and paste it on{" "}
+              <strong className="text-foreground">{displayPlatformVisual.displayName}</strong>{" "}
+              signup or verification page
+            </li>
             <li>OTP automatically appears here when SMS arrives — no typing needed</li>
-            <li>Click <strong className="text-foreground">Copy</strong> and paste the code on the platform</li>
+            <li>Click <strong className="text-foreground">Copy</strong> and paste the code on {displayPlatformVisual.displayName}</li>
             <li>Number lease lasts {LEASE_TTL_MINUTES} minutes — OTP must arrive within this window</li>
             <li>If no OTP arrives in time, your Rs {servicePrice} is automatically refunded</li>
             <li>Use <strong className="text-foreground">Cancel</strong> anytime before OTP to get an instant refund</li>

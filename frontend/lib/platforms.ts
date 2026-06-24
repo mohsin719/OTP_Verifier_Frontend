@@ -1,3 +1,5 @@
+import { Globe, ShoppingBag, Tag, type LucideIcon } from "lucide-react";
+
 export const PLATFORM_OPTIONS = [
   "Facebook",
   "Amazon",
@@ -17,10 +19,10 @@ export type PlatformCard = {
 
 /** Matches backend `platform_rules.base_cooldown_hours` defaults after successful OTP use. */
 export const PLATFORM_COOLDOWN_HOURS: Record<PlatformOption, number> = {
-  Facebook: 48,
-  Amazon: 72,
-  Walmart: 72,
-  Others: 48,
+  Facebook: 36,
+  Amazon: 48,
+  Walmart: 48,
+  Others: 24,
 };
 
 export function formatCooldownDuration(hours: number): string {
@@ -61,3 +63,65 @@ export const PLATFORM_CARDS: PlatformCard[] = [
     href: "/numbers",
   },
 ];
+
+export type PlatformVisual = {
+  label: PlatformOption;
+  displayName: string;
+  Icon: LucideIcon;
+  color: string;
+  bgColor: string;
+  border: string;
+};
+
+export const PLATFORM_VISUALS: Record<
+  PlatformOption,
+  Omit<PlatformVisual, "label" | "displayName">
+> = {
+  Facebook: {
+    Icon: Tag,
+    color: "text-blue-400",
+    bgColor: "bg-blue-500/15",
+    border: "border-blue-500/35",
+  },
+  Amazon: {
+    Icon: ShoppingBag,
+    color: "text-orange-400",
+    bgColor: "bg-orange-500/15",
+    border: "border-orange-500/35",
+  },
+  Walmart: {
+    Icon: ShoppingBag,
+    color: "text-amber-400",
+    bgColor: "bg-amber-500/15",
+    border: "border-amber-500/35",
+  },
+  Others: {
+    Icon: Globe,
+    color: "text-emerald-400",
+    bgColor: "bg-emerald-500/15",
+    border: "border-emerald-500/35",
+  },
+};
+
+export function serviceTypeToPlatform(raw: string | null | undefined): PlatformOption {
+  const value = raw?.trim().toLowerCase() ?? "";
+  if (value === "facebook") return "Facebook";
+  if (value === "amazon") return "Amazon";
+  if (value === "walmart") return "Walmart";
+  if (value === "others" || value === "other" || value === "generic") return "Others";
+  return "Others";
+}
+
+export function getPlatformVisual(platform: PlatformOption): PlatformVisual {
+  const card = PLATFORM_CARDS.find((p) => p.value === platform) ?? PLATFORM_CARDS[0];
+  const styles = PLATFORM_VISUALS[platform];
+  return {
+    label: platform,
+    displayName: card.name,
+    ...styles,
+  };
+}
+
+export function getPlatformPricePkr(platform: PlatformOption): number {
+  return platform === "Facebook" ? 30 : 60;
+}
