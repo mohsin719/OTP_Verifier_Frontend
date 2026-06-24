@@ -41,6 +41,9 @@ type ActiveNumber = {
 const DEFAULT_FACEBOOK_PRICE_PKR = 30;
 const OTHER_SERVICE_PRICE_PKR = 60;
 const LEASE_TTL_MINUTES = 10;
+/** Silent background sync while waiting for OTP — does not affect Refresh Status button. */
+const BACKGROUND_SYNC_INTERVAL_MS = 10_000;
+const LEASE_EXPIRED_TOAST_ID = "lease-expired-toast";
 
 function normalizeServiceType(rawPlatform: string | null): string {
   if (!rawPlatform) {
@@ -132,6 +135,7 @@ function NumbersPage() {
     }
   }, [fetchWalletBalance, token, user?.id]);
   const expireHandledRef = useRef<string | null>(null);
+  const otpAnnouncedRef = useRef<string | null>(null);
 
   const displayOtp = rawActive?.parsedOtp ?? polledOtp;
   const hasReceivedOtp =
@@ -199,6 +203,7 @@ function NumbersPage() {
     if (expireHandledRef.current === leaseKey) {
       return;
     }
+    expireHandledRef.current = leaseKey;
 
     // Final sync before release — catches OTP that landed at the last second
     try {
@@ -207,6 +212,7 @@ function NumbersPage() {
         { accessToken: token, disableDedupe: true, cacheTtlMs: 0 },
       );
       if (pollRes.success && pollRes.data?.status === "received" && pollRes.data.otp) {
+        expireHandledRef.current = null;
         setPolledOtp(pollRes.data.otp);
         await refresh();
         return;
@@ -225,6 +231,7 @@ function NumbersPage() {
           statusRes.data?.otpCode &&
           statusRes.data.status === "RECEIVED"
         ) {
+          expireHandledRef.current = null;
           setPolledOtp(statusRes.data.otpCode);
           await refresh();
           return;
@@ -245,8 +252,6 @@ function NumbersPage() {
         cacheTtlMs: 0,
       });
 
-      expireHandledRef.current = leaseKey;
-
       await syncWalletBalance();
       setOptimisticActive(null);
       setPolledOtp(null);
@@ -255,9 +260,12 @@ function NumbersPage() {
       if (activeRes.success && activeRes.data === null) {
         toast.success(
           `Lease expired. If OTP did not arrive, your Rs ${servicePrice} refund is in your wallet.`,
+          { id: LEASE_EXPIRED_TOAST_ID },
         );
       } else {
-        toast.info("Lease ended. You can get a new number.");
+        toast.info("Lease ended. You can get a new number.", {
+          id: LEASE_EXPIRED_TOAST_ID,
+        });
       }
     } catch (err) {
       console.error("Lease expiry cleanup failed:", err);
@@ -401,14 +409,14 @@ function NumbersPage() {
     polledOtp,
   ]);
 
-  // Sync active lease from server while waiting — keeps OTP in sync without UI flicker.
+  // Silent background sync — fixed 10s interval, no Refresh Status button disruption.
   useEffect(() => {
     if (!token || !isWaitingForOtp) {
       return;
     }
     const intervalId = window.setInterval(() => {
       revalidateActive();
-    }, 8000);
+    }, BACKGROUND_SYNC_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
   }, [token, isWaitingForOtp, revalidateActive]);
 
@@ -450,13 +458,17 @@ function NumbersPage() {
           cacheTtlMs: 0,
         });
         if (!controller.signal.aborted && res.success && res.data?.status === "received") {
+          if (otpAnnouncedRef.current === e164) {
+            return;
+          }
+          otpAnnouncedRef.current = e164;
           if (res.data.otp) {
             setPolledOtp(res.data.otp);
           }
           revalidateActive();
           setOtpFlash(true);
           setTimeout(() => setOtpFlash(false), 2500);
-          toast.success("OTP received via poll!");
+          toast.success("OTP received via poll!", { id: `otp-received-${e164}` });
         }
       } catch { /* silent */ } finally {
         if (abortControllerRef.current === controller) {
@@ -485,6 +497,7 @@ function NumbersPage() {
       e164 !== previousE164Ref.current
     ) {
       setPolledOtp(null);
+      otpAnnouncedRef.current = null;
     }
     if (e164) {
       previousE164Ref.current = e164;
@@ -1068,15 +1081,9 @@ function NumbersPage() {
                 disabled={loadingRefresh}
               >
                 <RefreshCw
-                  className={`h-4 w-4 ${
-                    loadingRefresh || isValidating ? "animate-spin" : ""
-                  }`}
+                  className={`h-4 w-4 ${loadingRefresh ? "animate-spin" : ""}`}
                 />
-                {loadingRefresh
-                  ? "Refreshing..."
-                  : isValidating
-                    ? "Syncing…"
-                    : "Refresh Status"}
+                {loadingRefresh ? "Refreshing..." : "Refresh Status"}
               </Button>
 
             </>
