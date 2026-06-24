@@ -112,6 +112,24 @@ export function serviceTypeToPlatform(raw: string | null | undefined): PlatformO
   return "Others";
 }
 
+/** Parse `?platform=` query on Get Number page. */
+export function platformFromQueryParam(
+  raw: string | null | undefined,
+): PlatformOption | null {
+  if (!raw?.trim()) {
+    return null;
+  }
+  return serviceTypeToPlatform(raw.trim());
+}
+
+/** Direct link from Platforms → Get Number (avoids redirect race). */
+export function numbersPageHref(platform: PlatformOption): string {
+  if (platform === "Others") {
+    return "/numbers";
+  }
+  return `/numbers?platform=${platform.toLowerCase()}`;
+}
+
 export function getPlatformVisual(platform: PlatformOption): PlatformVisual {
   const card = PLATFORM_CARDS.find((p) => p.value === platform) ?? PLATFORM_CARDS[0];
   const styles = PLATFORM_VISUALS[platform];

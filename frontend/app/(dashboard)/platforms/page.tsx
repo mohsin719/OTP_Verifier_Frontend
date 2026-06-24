@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ArrowRight, CheckCircle2, Globe, ShoppingBag, Smartphone, Tag, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { authUpdatePreferredPlatform } from "@/lib/api";
-import { PLATFORM_CARDS } from "@/lib/platforms";
+import { PLATFORM_CARDS, numbersPageHref, type PlatformOption } from "@/lib/platforms";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +57,7 @@ export default function PlatformsPage(): React.ReactElement {
     }
 
     setIsContinuing(false);
-    router.push(selectedCard.href);
+    router.push(numbersPageHref(selected as PlatformOption));
   }
 
   return (

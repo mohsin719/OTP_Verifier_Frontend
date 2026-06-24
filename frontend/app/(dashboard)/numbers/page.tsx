@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, memo, useMemo, startTransition } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, startTransition, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Copy, Phone, RefreshCw, ShieldCheck, Clock, Wifi, Info } from "lucide-react";
 import { toast } from "sonner";
 import { io, type Socket } from "socket.io-client";
@@ -30,6 +31,7 @@ import { useWalletStore } from "@/stores/wallet-store";
 import { PlatformBanner } from "@/components/platform/platform-banner";
 import {
   getPlatformVisual,
+  platformFromQueryParam,
   serviceTypeToPlatform,
   type PlatformOption,
 } from "@/lib/platforms";
@@ -76,13 +78,15 @@ function secondsUntil(isoStr: string): number {
   return Math.max(0, Math.floor((new Date(isoStr).getTime() - Date.now()) / 1000));
 }
 
-function NumbersPage() {
+function NumbersPageContent() {
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
   const { balancePkr, ownerUserId } = useWalletStore();
+  const searchParams = useSearchParams();
+  const urlPlatform = platformFromQueryParam(searchParams.get("platform"));
 
-  // Use user's preferred platform from auth store
-  const selectedPlatform = serviceTypeToPlatform(user?.preferredPlatform || "Facebook");
+  const selectedPlatform: PlatformOption =
+    urlPlatform ?? serviceTypeToPlatform(user?.preferredPlatform || "Facebook");
   const selectedPlatformVisual = getPlatformVisual(selectedPlatform);
   const serviceType = normalizeServiceType(selectedPlatform);
   const servicePrice = getServicePricePkr(serviceType);
@@ -152,7 +156,6 @@ function NumbersPage() {
     rawActive?.isLiveLease === true ||
     (rawActive?.isLiveLease !== false && leaseRemainingSec > 0);
   const sessionComplete = hasReceivedOtp && !isLiveLease;
-  const isWaitingForOtp = isLiveLease && !hasReceivedOtp && leaseRemainingSec > 0;
 
   /** Hide expired leases without OTP immediately when timer hits zero */
   const active = useMemo(() => {
@@ -171,18 +174,30 @@ function NumbersPage() {
   const activeServiceType = rawActive?.serviceType
     ? normalizeServiceType(rawActive.serviceType)
     : null;
+
   const activePlatform: PlatformOption = active?.serviceType
     ? serviceTypeToPlatform(active.serviceType)
     : activeServiceType
       ? serviceTypeToPlatform(activeServiceType)
       : selectedPlatform;
-  const displayPlatform = active ? activePlatform : selectedPlatform;
-  const displayPlatformVisual = getPlatformVisual(displayPlatform);
+  const activePlatformVisual = getPlatformVisual(activePlatform);
+
   const platformMismatch =
-    Boolean(rawActive) &&
-    !hasReceivedOtp &&
+    Boolean(active) &&
     activeServiceType !== null &&
     activeServiceType !== serviceType;
+
+  /** Hide the previous platform session when user picks a different platform. */
+  const displayActiveSession = active && !platformMismatch;
+
+  const displayPlatform = displayActiveSession ? activePlatform : selectedPlatform;
+  const displayPlatformVisual = getPlatformVisual(displayPlatform);
+
+  const isWaitingForOtp =
+    Boolean(displayActiveSession) &&
+    isLiveLease &&
+    !hasReceivedOtp &&
+    leaseRemainingSec > 0;
 
   const clearActiveState = useCallback(
     async (revalidate = true) => {
@@ -348,10 +363,10 @@ function NumbersPage() {
     }
 
     const awaitingOtp =
-      active?.otpStatus !== "EXPIRED" &&
-      active?.otpStatus !== "FAILED" &&
+      displayActiveSession?.otpStatus !== "EXPIRED" &&
+      displayActiveSession?.otpStatus !== "FAILED" &&
       !displayOtp &&
-      Boolean(active?.e164);
+      Boolean(displayActiveSession?.e164);
 
     if (!awaitingOtp) {
       setWsConnected(false);
@@ -413,8 +428,8 @@ function NumbersPage() {
     token,
     wsUrl,
     revalidateActive,
-    active?.e164,
-    active?.otpStatus,
+    displayActiveSession?.e164,
+    displayActiveSession?.otpStatus,
     displayOtp,
   ]);
 
@@ -436,11 +451,11 @@ function NumbersPage() {
 
   useEffect(() => {
     const awaitingOtp =
-      active?.otpStatus !== "EXPIRED" &&
-      active?.otpStatus !== "FAILED" &&
+      displayActiveSession?.otpStatus !== "EXPIRED" &&
+      displayActiveSession?.otpStatus !== "FAILED" &&
       !displayOtp;
 
-    if (!active?.e164 || !token || !awaitingOtp) {
+    if (!displayActiveSession?.e164 || !token || !awaitingOtp) {
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = null;
       if (abortControllerRef.current) {
@@ -449,7 +464,7 @@ function NumbersPage() {
       }
       return;
     }
-    const e164 = active.e164;
+    const e164 = displayActiveSession.e164;
 
     const doPoll = async () => {
       // Cancel previous request if still pending
@@ -494,7 +509,7 @@ function NumbersPage() {
         abortControllerRef.current = null;
       }
     };
-  }, [active?.e164, active?.otpStatus, displayOtp, token, revalidateActive]);
+  }, [displayActiveSession?.e164, displayActiveSession?.otpStatus, displayOtp, token, revalidateActive]);
 
   const previousE164Ref = useRef<string | null>(null);
   useEffect(() => {
@@ -614,7 +629,7 @@ function NumbersPage() {
   const acquire = useCallback(async () => {
     if (!token) return;
 
-    if (rawActive && !hasReceivedOtp) {
+    if (rawActive && (platformMismatch || !hasReceivedOtp)) {
       await replaceActiveNumber();
       return;
     }
@@ -660,6 +675,7 @@ function NumbersPage() {
     token,
     rawActive,
     hasReceivedOtp,
+    platformMismatch,
     replaceActiveNumber,
     serviceType,
     servicePrice,
@@ -884,7 +900,7 @@ function NumbersPage() {
 
         <PlatformBanner
           platform={displayPlatform}
-          mode={active ? "active" : "selected"}
+          mode={displayActiveSession ? "active" : "selected"}
           pricePkr={servicePrice}
         />
       </div>
@@ -896,10 +912,10 @@ function NumbersPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-lg">Active Number</CardTitle>
             <div className="flex items-center gap-2 self-start sm:self-auto">
-              {active &&
-              active.otpStatus !== "EXPIRED" &&
-              active.otpStatus !== "FAILED" &&
-              !active.parsedOtp &&
+              {displayActiveSession &&
+              displayActiveSession.otpStatus !== "EXPIRED" &&
+              displayActiveSession.otpStatus !== "FAILED" &&
+              !displayActiveSession.parsedOtp &&
               !polledOtp ? (
                 <div
                   className={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium ${
@@ -926,11 +942,25 @@ function NumbersPage() {
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
               You switched to{" "}
               <strong className="text-amber-100">{selectedPlatformVisual.displayName}</strong>.
-              Your current number was leased for a different platform. Tap{" "}
-              <strong className="text-amber-100">
-                Switch to {selectedPlatformVisual.displayName}
-              </strong>{" "}
-              below to cancel it, get your refund, and receive a new number.
+              {hasReceivedOtp ? (
+                <>
+                  {" "}
+                  Your {activePlatformVisual.displayName} OTP session is complete. Tap{" "}
+                  <strong className="text-amber-100">
+                    Get {selectedPlatformVisual.displayName} Number
+                  </strong>{" "}
+                  below to lease a new number (Rs {servicePrice}).
+                </>
+              ) : (
+                <>
+                  {" "}
+                  Your current number was leased for a different platform. Tap{" "}
+                  <strong className="text-amber-100">
+                    Switch to {selectedPlatformVisual.displayName}
+                  </strong>{" "}
+                  below to cancel it, get your refund, and receive a new number.
+                </>
+              )}
             </div>
           )}
           {showInitialSkeleton ? (
@@ -938,7 +968,7 @@ function NumbersPage() {
               <Skeleton className="h-20 w-full rounded-xl" />
               <Skeleton className="h-12 w-full rounded-xl" />
             </div>
-          ) : active ? (
+          ) : displayActiveSession ? (
             <>
               {sessionComplete && (
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
@@ -971,17 +1001,17 @@ function NumbersPage() {
                         US Number
                       </p>
                       <p className="text-xl sm:text-2xl font-bold font-mono tracking-wide text-foreground break-all">
-                        {active.e164}
+                        {displayActiveSession.e164}
                       </p>
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
                     <Badge
                       className={`text-xs font-semibold border ${
-                        statusColor[active.otpStatus] ?? statusColor.PENDING
+                        statusColor[displayActiveSession.otpStatus] ?? statusColor.PENDING
                       }`}
                     >
-                      {active.otpStatus}
+                      {displayActiveSession.otpStatus}
                     </Badge>
                     <Button
                       size="icon"
@@ -1053,7 +1083,7 @@ function NumbersPage() {
                         />
                       ))}
                     </div>
-                    {active.otpStatus === "PENDING" && (
+                    {displayActiveSession.otpStatus === "PENDING" && (
                       <div className="min-w-0 space-y-1.5 text-center text-xs text-muted-foreground sm:text-left">
                         <p>
                           Awaiting {expectedOtpLength}-digit SMS from{" "}
@@ -1159,7 +1189,7 @@ function NumbersPage() {
           )}
 
           {/* Acquire — only when no live lease or session complete */}
-          {(!isWaitingForOtp && (!active || platformMismatch || sessionComplete)) && (
+          {(!isWaitingForOtp && (!displayActiveSession || sessionComplete || platformMismatch)) && (
             <Button
               onClick={() => void acquire()}
               disabled={pending}
@@ -1176,7 +1206,9 @@ function NumbersPage() {
                 <>
                   <Phone className="h-4 w-4" />
                   {platformMismatch
-                    ? `Switch to ${selectedPlatformVisual.displayName} (Rs ${servicePrice})`
+                    ? hasReceivedOtp
+                      ? `Get ${selectedPlatformVisual.displayName} Number (Rs ${servicePrice})`
+                      : `Switch to ${selectedPlatformVisual.displayName} (Rs ${servicePrice})`
                     : sessionComplete
                       ? `Get New ${displayPlatformVisual.displayName} Number (Rs ${servicePrice})`
                       : `Get ${displayPlatformVisual.displayName} Number (Rs ${servicePrice})`}
@@ -1310,4 +1342,16 @@ function NumbersPage() {
   );
 }
 
-export default memo(NumbersPage);
+export default function NumbersPage(): React.ReactElement {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
+          Loading…
+        </div>
+      }
+    >
+      <NumbersPageContent />
+    </Suspense>
+  );
+}
