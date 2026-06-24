@@ -143,8 +143,7 @@ function NumbersPage() {
   const otpAnnouncedRef = useRef<string | null>(null);
 
   const displayOtp = rawActive?.parsedOtp ?? polledOtp;
-  const hasReceivedOtp =
-    rawActive?.otpStatus === "RECEIVED" || Boolean(displayOtp);
+  const hasReceivedOtp = Boolean(displayOtp);
 
   const leaseRemainingSec = rawActive?.leasedUntil
     ? secondsUntil(rawActive.leasedUntil)
@@ -351,10 +350,7 @@ function NumbersPage() {
     const awaitingOtp =
       active?.otpStatus !== "EXPIRED" &&
       active?.otpStatus !== "FAILED" &&
-      active?.otpStatus !== "RECEIVED" &&
-      !hasReceivedOtp &&
-      !active?.parsedOtp &&
-      !polledOtp &&
+      !displayOtp &&
       Boolean(active?.e164);
 
     if (!awaitingOtp) {
@@ -419,9 +415,7 @@ function NumbersPage() {
     revalidateActive,
     active?.e164,
     active?.otpStatus,
-    active?.parsedOtp,
-    polledOtp,
-    hasReceivedOtp,
+    displayOtp,
   ]);
 
   // Silent background sync — fixed 10s interval, no Refresh Status button disruption.
@@ -444,10 +438,7 @@ function NumbersPage() {
     const awaitingOtp =
       active?.otpStatus !== "EXPIRED" &&
       active?.otpStatus !== "FAILED" &&
-      active?.otpStatus !== "RECEIVED" &&
-      !hasReceivedOtp &&
-      !active?.parsedOtp &&
-      !polledOtp;
+      !displayOtp;
 
     if (!active?.e164 || !token || !awaitingOtp) {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -503,7 +494,7 @@ function NumbersPage() {
         abortControllerRef.current = null;
       }
     };
-  }, [active?.e164, active?.otpStatus, active?.parsedOtp, polledOtp, hasReceivedOtp, token, revalidateActive]);
+  }, [active?.e164, active?.otpStatus, displayOtp, token, revalidateActive]);
 
   const previousE164Ref = useRef<string | null>(null);
   useEffect(() => {
