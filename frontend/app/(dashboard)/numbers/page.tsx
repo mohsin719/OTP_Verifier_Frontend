@@ -30,6 +30,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
 import { PlatformBanner } from "@/components/platform/platform-banner";
 import {
+  getPlatformPricePkr,
   getPlatformVisual,
   platformFromQueryParam,
   serviceTypeToPlatform,
@@ -47,8 +48,6 @@ type ActiveNumber = {
   isLiveLease?: boolean;
 };
 
-const DEFAULT_FACEBOOK_PRICE_PKR = 30;
-const OTHER_SERVICE_PRICE_PKR = 60;
 const LEASE_TTL_MINUTES = 10;
 /** Silent background sync while waiting for OTP — does not affect Refresh Status button. */
 const BACKGROUND_SYNC_INTERVAL_MS = 10_000;
@@ -59,10 +58,6 @@ function normalizeServiceType(rawPlatform: string | null): string {
     return "generic";
   }
   return rawPlatform.trim().toLowerCase();
-}
-
-function getServicePricePkr(serviceType: string): number {
-  return serviceType === "facebook" ? DEFAULT_FACEBOOK_PRICE_PKR : OTHER_SERVICE_PRICE_PKR;
 }
 
 /** Format seconds as MM:SS countdown string */
@@ -84,12 +79,7 @@ function NumbersPageContent() {
   const { balancePkr, ownerUserId } = useWalletStore();
   const searchParams = useSearchParams();
   const urlPlatform = platformFromQueryParam(searchParams.get("platform"));
-
-  const selectedPlatform: PlatformOption =
-    urlPlatform ?? serviceTypeToPlatform(user?.preferredPlatform || "Facebook");
-  const selectedPlatformVisual = getPlatformVisual(selectedPlatform);
-  const serviceType = normalizeServiceType(selectedPlatform);
-  const servicePrice = getServicePricePkr(serviceType);
+  const preferredPlatform = serviceTypeToPlatform(user?.preferredPlatform || "Facebook");
 
   const {
     data: fetchedActive,
@@ -179,8 +169,25 @@ function NumbersPageContent() {
     ? serviceTypeToPlatform(active.serviceType)
     : activeServiceType
       ? serviceTypeToPlatform(activeServiceType)
-      : selectedPlatform;
+      : preferredPlatform;
   const activePlatformVisual = getPlatformVisual(activePlatform);
+  const activeSessionPrice = getPlatformPricePkr(activePlatform);
+
+  /** User explicitly picked another platform on the Platforms page. */
+  const intentionalPlatformSwitch =
+    urlPlatform !== null &&
+    active !== null &&
+    activeServiceType !== null &&
+    urlPlatform !== activePlatform &&
+    preferredPlatform === urlPlatform;
+
+  const selectedPlatform: PlatformOption =
+    active && activeServiceType && !intentionalPlatformSwitch
+      ? activePlatform
+      : (urlPlatform ?? preferredPlatform);
+  const selectedPlatformVisual = getPlatformVisual(selectedPlatform);
+  const serviceType = normalizeServiceType(selectedPlatform);
+  const servicePrice = getPlatformPricePkr(selectedPlatform);
 
   const platformMismatch =
     Boolean(active) &&
@@ -188,7 +195,8 @@ function NumbersPageContent() {
     activeServiceType !== serviceType;
 
   /** Hide the previous platform session when user picks a different platform. */
-  const displayActiveSession = active && !platformMismatch;
+  const displayActiveSession: ActiveNumber | null =
+    active && !platformMismatch ? active : null;
 
   const displayPlatform = displayActiveSession ? activePlatform : selectedPlatform;
   const displayPlatformVisual = getPlatformVisual(displayPlatform);
@@ -972,8 +980,9 @@ function NumbersPageContent() {
             <>
               {sessionComplete && (
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-                  OTP received successfully. This session is complete — get a new
-                  number below to try again (Rs {servicePrice}).
+                  {activePlatformVisual.displayName} OTP received successfully. This session
+                  is complete — get a new {activePlatformVisual.displayName} number below
+                  (Rs {activeSessionPrice}).
                 </div>
               )}
               {/* Phone Number Display */}
@@ -1210,7 +1219,7 @@ function NumbersPageContent() {
                       ? `Get ${selectedPlatformVisual.displayName} Number (Rs ${servicePrice})`
                       : `Switch to ${selectedPlatformVisual.displayName} (Rs ${servicePrice})`
                     : sessionComplete
-                      ? `Get New ${displayPlatformVisual.displayName} Number (Rs ${servicePrice})`
+                      ? `Get New ${activePlatformVisual.displayName} Number (Rs ${activeSessionPrice})`
                       : `Get ${displayPlatformVisual.displayName} Number (Rs ${servicePrice})`}
                 </>
               )}
