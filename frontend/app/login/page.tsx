@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, useRef, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,20 +26,36 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
+  const submitLockRef = useRef(false);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
-    setPending(true);
-    const result = await authLogin({ email, password });
-    setPending(false);
-    if (!result.success) {
-      toast.error(result.error);
+    if (submitLockRef.current || pending) {
       return;
     }
-    setAuth(result.data.accessToken, result.data.user);
-    toast.success("Welcome back.");
-    router.push("/dashboard");
-    router.refresh();
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password) {
+      toast.error("Enter your email and password.");
+      return;
+    }
+
+    submitLockRef.current = true;
+    setPending(true);
+    try {
+      const result = await authLogin({ email: normalizedEmail, password });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      setAuth(result.data.accessToken, result.data.user);
+      toast.success("Welcome back.");
+      router.push("/dashboard");
+      router.refresh();
+    } finally {
+      setPending(false);
+      submitLockRef.current = false;
+    }
   }
 
   return (
