@@ -167,7 +167,7 @@ export default function AdminUsersPage(): React.ReactElement {
     }
 
     setIsAdjusting(true);
-    const res = await apiFetch<{ success: true; data: { balancePkr: number } }>(
+    const res = await apiFetch<{ balancePkr: number }>(
       `/api/manage/users/${balanceUserId}/balance`,
       {
         method: "POST",
