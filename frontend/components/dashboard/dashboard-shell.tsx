@@ -23,6 +23,7 @@ import {
   PremiumSidebarShell,
   PremiumSidebarWallet,
 } from "@/components/dashboard/premium-sidebar";
+import { Loader2 } from "lucide-react";
 import { apiFetch, AUTH_UNAUTHORIZED_EVENT } from "@/lib/api";
 import { isNavActive } from "@/lib/nav-utils";
 import { cn } from "@/lib/utils";
@@ -62,7 +63,7 @@ export function DashboardShell({
   const pathname = usePathname();
   const router = useRouter();
   const { token, user, hydrated, setAuth } = useAuthStore();
-  const { balancePkr, ownerUserId, lastFetchedAt, fetchBalance, hydrateFromCache, invalidate, setLoading } =
+  const { balancePkr, ownerUserId, lastFetchedAt, fetchBalance, invalidate, setLoading } =
     useWalletStore();
   const [sessionReady, setSessionReady] = useState(false);
 
@@ -99,7 +100,6 @@ export function DashboardShell({
     }
 
     setLoading(true);
-    hydrateFromCache(user.id, WALLET_CACHE_TTL_MS);
     void fetchBalance(token, user.id);
   }, [
     sessionReady,
@@ -108,7 +108,6 @@ export function DashboardShell({
     ownerUserId,
     lastFetchedAt,
     fetchBalance,
-    hydrateFromCache,
     invalidate,
     setLoading,
   ]);
@@ -167,8 +166,11 @@ export function DashboardShell({
 
   if (!hydrated || !sessionReady || !token || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Checking session…</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
+        <p className="text-sm text-muted-foreground text-center">
+          Loading your account…
+        </p>
       </div>
     );
   }

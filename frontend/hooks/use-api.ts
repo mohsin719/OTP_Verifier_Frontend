@@ -17,7 +17,8 @@ export function useApi<T>(
 
     if (!res.success) {
       console.error(`Fetch Error for ${url}:`, res.error);
-      return null as T;
+      // Throw so SWR keeps previous data during background revalidation.
+      throw new Error(res.error);
     }
 
     return res.data;
@@ -26,8 +27,10 @@ export function useApi<T>(
   const key = path && token ? path : null;
 
   return useSWR<T, Error>(key, fetcher, {
-    revalidateOnFocus: false, // Don't revalidate every time window gets focus
-    revalidateIfStale: true, // Do revalidate on mount if data is stale
+    revalidateOnFocus: false,
+    revalidateIfStale: true,
+    revalidateOnMount: true,
+    keepPreviousData: true,
     dedupingInterval: 2000,
     ...options,
   });

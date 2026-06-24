@@ -35,12 +35,12 @@ type ActiveNumber = {
   otpStatus: "PENDING" | "RECEIVED" | "EXPIRED" | "FAILED";
   otpRequestId: string;
   serviceType?: string | null;
+  isLiveLease?: boolean;
 };
 
 const DEFAULT_FACEBOOK_PRICE_PKR = 30;
 const OTHER_SERVICE_PRICE_PKR = 60;
-/** Must match backend NUMBER_LEASE_GRACE_SECONDS — keeps polling after countdown hits 0 */
-const LEASE_EXPIRE_GRACE_SEC = 45;
+const LEASE_TTL_MINUTES = 10;
 
 function normalizeServiceType(rawPlatform: string | null): string {
   if (!rawPlatform) {
@@ -78,12 +78,22 @@ function NumbersPage() {
 
   const {
     data: fetchedActive,
-    isLoading: loading,
+    isLoading,
+    isValidating,
     mutate: refresh,
   } = useApi<ActiveNumber | null>("/api/numbers/active", {
     disableDedupe: true,
     cacheTtlMs: 0,
+    keepPreviousData: true,
+    revalidateOnMount: true,
   });
+  const lastFetchedRef = useRef<ActiveNumber | null>(null);
+  if (fetchedActive) {
+    lastFetchedRef.current = fetchedActive;
+  }
+  const stableFetchedActive =
+    fetchedActive ??
+    (isValidating ? lastFetchedRef.current : null);
   const { wsUrl } = getPublicEnv();
 
   const [pending, setPending] = useState(false);
@@ -96,25 +106,24 @@ function NumbersPage() {
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [loadingChangeNumber, setLoadingChangeNumber] = useState(false);
   const [expectedOtpLength] = useState(6);
-  const [showChangeNumberDialog, setShowChangeNumberDialog] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showSwapDialog, setShowSwapDialog] = useState(false);
   const [showPostOtpChangeDialog, setShowPostOtpChangeDialog] = useState(false);
   const [showRechargePopup, setShowRechargePopup] = useState(false);
   const [rechargeServicePrice, setRechargeServicePrice] = useState<number | undefined>(undefined);
   const [rechargeDescription, setRechargeDescription] = useState<string | undefined>(undefined);
-  const rawActive = optimisticActive ?? fetchedActive ?? null;
-  const adjustWallet = useWalletStore((s) => s.adjustBalance);
+  const rawActive = optimisticActive ?? stableFetchedActive ?? null;
+  const showInitialSkeleton = isLoading && !rawActive;
   const fetchWalletBalance = useWalletStore((s) => s.fetchBalance);
 
   const syncWalletAfterRefund = useCallback(
-    async (refundAmountPkr?: number | null) => {
-      if (refundAmountPkr && refundAmountPkr > 0) {
-        adjustWallet(refundAmountPkr);
-      }
+    async (_refundAmountPkr?: number | null) => {
+      // Always trust server balance — never optimistic add (prevents double-count in UI).
       if (token && user?.id) {
         await fetchWalletBalance(token, user.id);
       }
     },
-    [adjustWallet, fetchWalletBalance, token, user?.id],
+    [fetchWalletBalance, token, user?.id],
   );
 
   const syncWalletBalance = useCallback(async () => {
@@ -128,7 +137,16 @@ function NumbersPage() {
   const hasReceivedOtp =
     rawActive?.otpStatus === "RECEIVED" || Boolean(displayOtp);
 
-  /** Hide expired leases without OTP after grace window */
+  const leaseRemainingSec = rawActive?.leasedUntil
+    ? secondsUntil(rawActive.leasedUntil)
+    : 0;
+  const isLiveLease =
+    rawActive?.isLiveLease === true ||
+    (rawActive?.isLiveLease !== false && leaseRemainingSec > 0);
+  const sessionComplete = hasReceivedOtp && !isLiveLease;
+  const isWaitingForOtp = isLiveLease && !hasReceivedOtp && leaseRemainingSec > 0;
+
+  /** Hide expired leases without OTP immediately when timer hits zero */
   const active = useMemo(() => {
     if (!rawActive) {
       return null;
@@ -136,8 +154,7 @@ function NumbersPage() {
     const remaining = rawActive.leasedUntil
       ? secondsUntil(rawActive.leasedUntil)
       : 0;
-    const pastGrace = remaining <= -LEASE_EXPIRE_GRACE_SEC;
-    if (pastGrace && !hasReceivedOtp) {
+    if (remaining <= 0 && !hasReceivedOtp) {
       return null;
     }
     return rawActive;
@@ -156,10 +173,15 @@ function NumbersPage() {
     async (revalidate = true) => {
       setOptimisticActive(null);
       setPolledOtp(null);
+      lastFetchedRef.current = null;
       await refresh(null, { revalidate });
     },
     [refresh],
   );
+
+  const revalidateActive = useCallback(() => {
+    void refresh(undefined, { revalidate: true });
+  }, [refresh]);
 
   const handleLeaseExpired = useCallback(async () => {
     if (!token || !rawActive || hasReceivedOtp) {
@@ -169,7 +191,7 @@ function NumbersPage() {
     const remaining = rawActive.leasedUntil
       ? secondsUntil(rawActive.leasedUntil)
       : 0;
-    if (remaining > -LEASE_EXPIRE_GRACE_SEC) {
+    if (remaining > 0) {
       return;
     }
 
@@ -212,36 +234,38 @@ function NumbersPage() {
       /* proceed with expire cleanup */
     }
 
-    expireHandledRef.current = leaseKey;
-
-    setShowChangeNumberDialog(false);
+    setShowCancelDialog(false);
     await clearActiveState(false);
 
     try {
-      const res = await apiFetch<{
-        refunded?: boolean;
-        refundAmountPkr?: number | null;
-      }>("/api/numbers/release", {
-        method: "POST",
+      // Reconcile expiry + refund on server (idempotent) — do not call release again.
+      const activeRes = await apiFetch<ActiveNumber | null>("/api/numbers/active", {
         accessToken: token,
+        disableDedupe: true,
+        cacheTtlMs: 0,
       });
 
-      if (res.success && res.data?.refunded && res.data.refundAmountPkr) {
-        await syncWalletAfterRefund(res.data.refundAmountPkr);
+      expireHandledRef.current = leaseKey;
+
+      await syncWalletBalance();
+      setOptimisticActive(null);
+      setPolledOtp(null);
+      await refresh();
+
+      if (activeRes.success && activeRes.data === null) {
         toast.success(
-          `Lease expired. PKR ${res.data.refundAmountPkr} refunded to your wallet.`,
+          `Lease expired. If OTP did not arrive, your Rs ${servicePrice} refund is in your wallet.`,
         );
       } else {
-        await syncWalletBalance();
+        toast.info("Lease ended. You can get a new number.");
       }
-
-      await refresh();
     } catch (err) {
       console.error("Lease expiry cleanup failed:", err);
+      expireHandledRef.current = null;
       await syncWalletBalance();
       await refresh();
     }
-  }, [token, rawActive, hasReceivedOtp, clearActiveState, syncWalletAfterRefund, syncWalletBalance, refresh]);
+  }, [token, rawActive, hasReceivedOtp, clearActiveState, syncWalletBalance, refresh, servicePrice]);
 
   const checkBalanceRequirement = useCallback((requiredPrice: number): boolean => {
     if (balancePkr === null || ownerUserId !== user?.id) {
@@ -255,6 +279,18 @@ function NumbersPage() {
     setRechargeDescription(description);
     setShowRechargePopup(true);
   }, []);
+
+  useEffect(() => {
+    if (!fetchedActive && rawActive && !hasReceivedOtp) {
+      const remaining = rawActive.leasedUntil
+        ? secondsUntil(rawActive.leasedUntil)
+        : 0;
+      if (remaining <= 0 && !hasReceivedOtp) {
+        setOptimisticActive(null);
+        setPolledOtp(null);
+      }
+    }
+  }, [fetchedActive, rawActive, hasReceivedOtp]);
 
   useEffect(() => {
     if (!optimisticActive || !fetchedActive) {
@@ -277,7 +313,7 @@ function NumbersPage() {
       const remaining = secondsUntil(rawActive.leasedUntil);
       setCountdown((prev) => (prev === remaining ? prev : remaining));
 
-      if (remaining <= -LEASE_EXPIRE_GRACE_SEC && !hasReceivedOtp) {
+      if (remaining <= 0 && !hasReceivedOtp) {
         void handleLeaseExpired();
       }
     }, 1000);
@@ -335,7 +371,7 @@ function NumbersPage() {
         }
         setOtpFlash(true);
       });
-      void refresh();
+      revalidateActive();
       window.setTimeout(() => setOtpFlash(false), 2500);
       toast.success("OTP received!", { duration: 4000 });
     };
@@ -358,12 +394,23 @@ function NumbersPage() {
   }, [
     token,
     wsUrl,
-    refresh,
+    revalidateActive,
     active?.e164,
     active?.otpStatus,
     active?.parsedOtp,
     polledOtp,
   ]);
+
+  // Sync active lease from server while waiting — keeps OTP in sync without UI flicker.
+  useEffect(() => {
+    if (!token || !isWaitingForOtp) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      revalidateActive();
+    }, 8000);
+    return () => window.clearInterval(intervalId);
+  }, [token, isWaitingForOtp, revalidateActive]);
 
   // Fast-poll fallback: keep polling while pending so first OTP is never missed,
   // even if socket room handoff races with initial webhook emit.
@@ -406,7 +453,7 @@ function NumbersPage() {
           if (res.data.otp) {
             setPolledOtp(res.data.otp);
           }
-          void refresh();
+          revalidateActive();
           setOtpFlash(true);
           setTimeout(() => setOtpFlash(false), 2500);
           toast.success("OTP received via poll!");
@@ -427,10 +474,21 @@ function NumbersPage() {
         abortControllerRef.current = null;
       }
     };
-  }, [active?.e164, active?.otpStatus, active?.parsedOtp, polledOtp, token, refresh]);
+  }, [active?.e164, active?.otpStatus, active?.parsedOtp, polledOtp, token, revalidateActive]);
 
+  const previousE164Ref = useRef<string | null>(null);
   useEffect(() => {
-    setPolledOtp(null);
+    const e164 = active?.e164 ?? null;
+    if (
+      e164 &&
+      previousE164Ref.current &&
+      e164 !== previousE164Ref.current
+    ) {
+      setPolledOtp(null);
+    }
+    if (e164) {
+      previousE164Ref.current = e164;
+    }
   }, [active?.e164]);
 
   const copyToClipboard = useCallback(
@@ -468,12 +526,13 @@ function NumbersPage() {
         otpStatus: "PENDING",
         otpRequestId: data.otpRequestId ?? data.leaseId ?? "pending",
         serviceType,
+        isLiveLease: true,
       });
       setPolledOtp(null);
       void syncWalletBalance();
-      void refresh();
+      revalidateActive();
     },
-    [syncWalletBalance, refresh, serviceType],
+    [syncWalletBalance, revalidateActive, serviceType],
   );
 
   const replaceActiveNumber = useCallback(async () => {
@@ -562,6 +621,12 @@ function NumbersPage() {
         openRechargePopup(servicePrice, "Insufficient funds for this platform.");
         return;
       }
+      if (
+        res.error === "Please wait a moment before requesting another number."
+      ) {
+        toast.error("Please wait about 60 seconds before getting another number.");
+        return;
+      }
       toast.error(res.error);
       return;
     }
@@ -609,7 +674,7 @@ function NumbersPage() {
 
       if (res.success && res.data?.status === "RECEIVED" && res.data.otpCode) {
         setPolledOtp(res.data.otpCode);
-        void refresh();
+        revalidateActive();
         setOtpFlash(true);
         setTimeout(() => setOtpFlash(false), 2500);
         toast.success("OTP received!");
@@ -624,12 +689,18 @@ function NumbersPage() {
 
       if (pollRes.success && pollRes.data?.status === "received" && pollRes.data.otp) {
         setPolledOtp(pollRes.data.otp);
-        void refresh();
+        revalidateActive();
         setOtpFlash(true);
         setTimeout(() => setOtpFlash(false), 2500);
         toast.success("OTP recovered from latest webhook event!");
+      } else if (isWaitingForOtp || leaseRemainingSec > 0) {
+        toast.info(
+          `Please wait up to ${LEASE_TTL_MINUTES} minutes for the OTP. ${formatCountdown(leaseRemainingSec)} remaining on this number.`,
+        );
       } else {
-        toast.info("No OTP found yet. If needed, trigger resend from the target platform.");
+        toast.info(
+          "No OTP was received for this number. If the lease ended, your wallet was refunded automatically.",
+        );
       }
     } catch (err) {
       console.error("Refresh failed:", err);
@@ -637,7 +708,14 @@ function NumbersPage() {
     } finally {
       setLoadingRefresh(false);
     }
-  }, [active?.otpRequestId, active?.e164, token, refresh]);
+  }, [
+    active?.otpRequestId,
+    active?.e164,
+    token,
+    revalidateActive,
+    isWaitingForOtp,
+    leaseRemainingSec,
+  ]);
 
   const releaseActiveNumber = useCallback(async () => {
     if (!token) return;
@@ -653,7 +731,7 @@ function NumbersPage() {
       });
       
       if (res.success) {
-        setShowChangeNumberDialog(false);
+        setShowCancelDialog(false);
         expireHandledRef.current = null;
         await clearActiveState(true);
         if (res.data?.refunded && res.data.refundAmountPkr) {
@@ -683,32 +761,22 @@ function NumbersPage() {
   }, [token, clearActiveState, syncWalletAfterRefund, syncWalletBalance, hasReceivedOtp]);
 
   const handleRefundOnly = useCallback(async () => {
-    setShowChangeNumberDialog(false);
+    setShowCancelDialog(false);
     await releaseActiveNumber();
   }, [releaseActiveNumber]);
 
-  const handleChangeNumber = useCallback(() => {
-    if (hasReceivedOtp) {
-      setShowPostOtpChangeDialog(true);
-      return;
-    }
-    setShowChangeNumberDialog(true);
-  }, [hasReceivedOtp]);
-
-  const confirmChangeNumber = useCallback(async () => {
+  const confirmSwapNumber = useCallback(async () => {
     if (!token) return;
 
-    // Check balance before making API call
     if (checkBalanceRequirement(servicePrice)) {
       openRechargePopup(servicePrice, "Insufficient funds for this platform.");
       return;
     }
 
-    setShowChangeNumberDialog(false);
-    setShowPostOtpChangeDialog(false);
+    setShowSwapDialog(false);
     setLoadingChangeNumber(true);
-    toast.info("Changing number... Please wait 2-3 seconds");
-    
+    toast.info("Assigning new number…");
+
     try {
       const res = await apiFetch<{
         phoneNumber: string;
@@ -720,7 +788,7 @@ function NumbersPage() {
         accessToken: token,
         body: JSON.stringify({ serviceType }),
       });
-      
+
       if (res.success) {
         expireHandledRef.current = null;
         assignActiveNumber({
@@ -729,26 +797,39 @@ function NumbersPage() {
           otpRequestId: res.data.otpRequestId,
           leaseId: res.data.leaseId,
         });
-        toast.success("Number changed successfully! New number assigned.");
+        toast.success(`New number assigned! ${LEASE_TTL_MINUTES}-minute timer reset.`);
       } else {
         if (res.error === "INSUFFICIENT_BALANCE") {
           openRechargePopup(servicePrice, "Insufficient funds for this platform.");
           return;
         }
+        if (
+          res.error === "Please wait a moment before requesting another number."
+        ) {
+          toast.error("Please wait about 60 seconds before getting another number.");
+          return;
+        }
         toast.error(res.error || "Failed to change number");
       }
     } catch (err) {
-      console.error("Change number failed:", err);
+      console.error("Swap number failed:", err);
       toast.error("Failed to change number. Please try again.");
     } finally {
       setLoadingChangeNumber(false);
     }
-  }, [token, serviceType, servicePrice, checkBalanceRequirement, openRechargePopup, assignActiveNumber]);
+  }, [
+    token,
+    serviceType,
+    servicePrice,
+    checkBalanceRequirement,
+    openRechargePopup,
+    assignActiveNumber,
+  ]);
 
   const confirmPostOtpChange = useCallback(async () => {
     setShowPostOtpChangeDialog(false);
-    await confirmChangeNumber();
-  }, [confirmChangeNumber]);
+    await confirmSwapNumber();
+  }, [confirmSwapNumber]);
 
   const statusColor = {
     PENDING: "bg-amber-500/15 text-amber-400 border-amber-500/30",
@@ -816,13 +897,19 @@ function NumbersPage() {
               below to cancel it, get your refund, and receive a new number.
             </div>
           )}
-          {loading ? (
+          {showInitialSkeleton ? (
             <div className="space-y-3">
               <Skeleton className="h-20 w-full rounded-xl" />
               <Skeleton className="h-12 w-full rounded-xl" />
             </div>
           ) : active ? (
             <>
+              {sessionComplete && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                  OTP received successfully. This session is complete — get a new
+                  number below to try again (Rs {servicePrice}).
+                </div>
+              )}
               {/* Phone Number Display */}
               <div className="rounded-xl border border-border/60 bg-secondary/20 p-3 sm:p-4 space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -861,8 +948,10 @@ function NumbersPage() {
                       {formatCountdown(countdown)}
                     </span>
                   </div>
-                  {countdown === 0 && (
-                    <span className="text-xs text-red-400 sm:ml-auto">Lease expired</span>
+                  {countdown === 0 && !hasReceivedOtp && (
+                    <span className="text-xs text-red-400 sm:ml-auto">
+                      Time expired — refunding…
+                    </span>
                   )}
                 </div>
               </div>
@@ -925,25 +1014,49 @@ function NumbersPage() {
                   </div>
                 )}
 
-              {(active.otpStatus === "PENDING" || hasReceivedOtp) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleChangeNumber}
-                className="mt-4 gap-2 w-full border-border/50"
-                disabled={loadingChangeNumber}
-              >
-                {loadingChangeNumber ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                {loadingChangeNumber
-                  ? "Changing..."
-                  : hasReceivedOtp
-                    ? "Change Number"
-                    : "Cancel"}
-              </Button>
+              {isWaitingForOtp && (
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCancelDialog(true)}
+                    className="flex-1 gap-2 border-border/50"
+                    disabled={loadingRefresh || loadingChangeNumber}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowSwapDialog(true)}
+                    className="flex-1 gap-2 border-border/50"
+                    disabled={loadingChangeNumber}
+                  >
+                    {loadingChangeNumber ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    {loadingChangeNumber ? "Changing…" : "Change Number"}
+                  </Button>
+                </div>
+              )}
+
+              {hasReceivedOtp && isLiveLease && !sessionComplete && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPostOtpChangeDialog(true)}
+                  className="mt-4 gap-2 w-full border-border/50"
+                  disabled={loadingChangeNumber}
+                >
+                  {loadingChangeNumber ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {loadingChangeNumber ? "Changing…" : "Change Number"}
+                </Button>
               )}
               </div>
 
@@ -954,8 +1067,16 @@ function NumbersPage() {
                 className="gap-2 w-full border-border/50"
                 disabled={loadingRefresh}
               >
-                <RefreshCw className={`h-4 w-4 ${loadingRefresh ? 'animate-spin' : ''}`} />
-                {loadingRefresh ? 'Refreshing...' : 'Refresh Status'}
+                <RefreshCw
+                  className={`h-4 w-4 ${
+                    loadingRefresh || isValidating ? "animate-spin" : ""
+                  }`}
+                />
+                {loadingRefresh
+                  ? "Refreshing..."
+                  : isValidating
+                    ? "Syncing…"
+                    : "Refresh Status"}
               </Button>
 
             </>
@@ -973,8 +1094,8 @@ function NumbersPage() {
             </div>
           )}
 
-          {/* Acquire / platform switch */}
-          {(!active || platformMismatch) && (
+          {/* Acquire — only when no live lease or session complete */}
+          {(!isWaitingForOtp && (!active || platformMismatch || sessionComplete)) && (
             <Button
               onClick={() => void acquire()}
               disabled={pending}
@@ -992,7 +1113,9 @@ function NumbersPage() {
                   <Phone className="h-4 w-4" />
                   {platformMismatch
                     ? `Switch to ${userPlatform} (Rs ${servicePrice})`
-                    : `Get US Number (Rs ${servicePrice})`}
+                    : sessionComplete
+                      ? `Get New Number (Rs ${servicePrice})`
+                      : `Get US Number (Rs ${servicePrice})`}
                 </>
               )}
             </Button>
@@ -1014,7 +1137,10 @@ function NumbersPage() {
             <li>Copy the number and paste it on Facebook / your platform&apos;s signup page</li>
             <li>OTP automatically appears here when SMS arrives — no typing needed</li>
             <li>Click <strong className="text-foreground">Copy</strong> and paste the code on the platform</li>
-            <li>Number returns to pool after lease expires (~30 min)</li>
+            <li>Number lease lasts {LEASE_TTL_MINUTES} minutes — OTP must arrive within this window</li>
+            <li>If no OTP arrives in time, your Rs {servicePrice} is automatically refunded</li>
+            <li>Use <strong className="text-foreground">Cancel</strong> anytime before OTP to get an instant refund</li>
+            <li>Use <strong className="text-foreground">Change Number</strong> to swap to a new number (same price, timer resets)</li>
           </ol>
         </CardContent>
       </Card>
@@ -1028,30 +1154,55 @@ function NumbersPage() {
         description={rechargeDescription}
       />
 
-      {/* Pre-OTP: refund or change */}
-      <Dialog open={showChangeNumberDialog} onOpenChange={setShowChangeNumberDialog}>
+      {/* Cancel — refund if no OTP yet */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancel</DialogTitle>
+            <DialogTitle>Cancel number?</DialogTitle>
             <DialogDescription>
-              No OTP yet. <strong>Yes</strong> cancels and refunds Rs {servicePrice}.{" "}
-              <strong>No</strong> keeps this number.
+              No OTP received yet. Cancelling will refund <strong>Rs {servicePrice}</strong> to
+              your wallet immediately.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2 pt-2 sm:flex-row">
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => void handleRefundOnly()}
-              disabled={loadingRefresh}
+              onClick={() => setShowCancelDialog(false)}
             >
-              {loadingRefresh ? "Processing…" : "Yes"}
+              Keep number
             </Button>
             <Button
               className="flex-1"
-              onClick={() => setShowChangeNumberDialog(false)}
+              onClick={() => void handleRefundOnly()}
+              disabled={loadingRefresh}
             >
-              No
+              {loadingRefresh ? "Processing…" : `Cancel & refund Rs ${servicePrice}`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Swap number — same price, new 10-min timer */}
+      <Dialog open={showSwapDialog} onOpenChange={setShowSwapDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change number?</DialogTitle>
+            <DialogDescription>
+              You will get a <strong>new US number</strong> at the same price (Rs {servicePrice}).
+              The {LEASE_TTL_MINUTES}-minute timer resets. No extra charge if OTP has not arrived yet.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowSwapDialog(false)}
+            >
+              Keep number
+            </Button>
+            <Button className="flex-1" onClick={() => void confirmSwapNumber()}>
+              Get new number
             </Button>
           </div>
         </DialogContent>

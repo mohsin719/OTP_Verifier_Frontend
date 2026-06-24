@@ -69,6 +69,9 @@ export default function AdminUsersPage(): React.ReactElement {
   // Balance modal state
   const [balanceModalOpen, setBalanceModalOpen] = useState(false);
   const [balanceUserId, setBalanceUserId] = useState<string | null>(null);
+  const [balanceUserLabel, setBalanceUserLabel] = useState("");
+  const [balanceUserCurrentPkr, setBalanceUserCurrentPkr] = useState(0);
+  const [adjustMode, setAdjustMode] = useState<"add" | "remove">("add");
   const [balanceAmount, setBalanceAmount] = useState("");
   const [balanceReason, setBalanceReason] = useState("");
   const [isAdjusting, setIsAdjusting] = useState(false);
@@ -145,18 +148,34 @@ export default function AdminUsersPage(): React.ReactElement {
 
   const handleAdjustBalance = async () => {
     if (!token || !balanceUserId) return;
-    const amountPkr = toPkr(balanceAmount);
-    if (isNaN(amountPkr)) {
-      toast.error("Please enter a valid number amount.");
+    const rawAmount = toPkr(balanceAmount);
+    if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+      toast.error("Please enter a valid amount greater than 0.");
       return;
     }
+    if (!balanceReason.trim()) {
+      toast.error("Please enter a reason for this adjustment.");
+      return;
+    }
+
+    const amountPkr = adjustMode === "remove" ? -rawAmount : rawAmount;
+    if (adjustMode === "remove" && balanceUserCurrentPkr + amountPkr < 0) {
+      toast.error(
+        `Cannot remove more than the current balance (${formatBalancePkr(balanceUserCurrentPkr)}).`,
+      );
+      return;
+    }
+
     setIsAdjusting(true);
     const res = await apiFetch<{ success: true; data: { balancePkr: number } }>(
       `/api/manage/users/${balanceUserId}/balance`,
       {
         method: "POST",
         accessToken: token,
-        body: JSON.stringify({ amountPkr, reason: balanceReason }),
+        body: JSON.stringify({
+          amountPkr,
+          reason: balanceReason.trim(),
+        }),
       },
     );
     setIsAdjusting(false);
@@ -164,10 +183,15 @@ export default function AdminUsersPage(): React.ReactElement {
       toast.error(res.error);
       return;
     }
-    toast.success("Balance adjusted");
+    toast.success(
+      adjustMode === "add"
+        ? `Added ${formatBalancePkr(rawAmount)}. New balance: ${formatBalancePkr(res.data.balancePkr)}`
+        : `Removed ${formatBalancePkr(rawAmount)}. New balance: ${formatBalancePkr(res.data.balancePkr)}`,
+    );
     setBalanceModalOpen(false);
     setBalanceAmount("");
     setBalanceReason("");
+    setAdjustMode("add");
     mutate();
   };
 
@@ -251,10 +275,24 @@ export default function AdminUsersPage(): React.ReactElement {
     setBanModalOpen(true);
   };
 
-  const openAdjustModal = (userId: string) => {
-    setBalanceUserId(userId);
+  const openAdjustModal = (user: UserRow) => {
+    setBalanceUserId(user.id);
+    setBalanceUserLabel(user.username || user.email);
+    setBalanceUserCurrentPkr(user.balancePkr);
+    setAdjustMode("add");
+    setBalanceAmount("");
+    setBalanceReason("");
     setBalanceModalOpen(true);
   };
+
+  const adjustPreviewPkr = (() => {
+    const raw = toPkr(balanceAmount);
+    if (!Number.isFinite(raw) || raw <= 0) return null;
+    const signed = adjustMode === "remove" ? -raw : raw;
+    const next = balanceUserCurrentPkr + signed;
+    if (next < 0) return null;
+    return next;
+  })();
 
   const refreshUsers = async () => {
     if (!token) return;
@@ -472,7 +510,7 @@ export default function AdminUsersPage(): React.ReactElement {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => openAdjustModal(u.id)}
+                              onClick={() => openAdjustModal(u)}
                             >
                               Adjust
                             </Button>
@@ -576,36 +614,78 @@ export default function AdminUsersPage(): React.ReactElement {
       </Dialog>
 
       {/* Balance Adjustment Modal */}
-      <Dialog open={balanceModalOpen} onOpenChange={setBalanceModalOpen}>
+      <Dialog
+        open={balanceModalOpen}
+        onOpenChange={(open) => {
+          setBalanceModalOpen(open);
+          if (!open) {
+            setAdjustMode("add");
+            setBalanceAmount("");
+            setBalanceReason("");
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Adjust Balance</DialogTitle>
             <DialogDescription>
-              Enter the amount to add (positive) or remove (negative) from the user&apos;s wallet.
+              Update wallet for <strong>{balanceUserLabel}</strong>. Current balance:{" "}
+              <strong>{formatBalancePkr(balanceUserCurrentPkr)}</strong>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={adjustMode === "add" ? "default" : "outline"}
+                onClick={() => setAdjustMode("add")}
+              >
+                Add funds
+              </Button>
+              <Button
+                type="button"
+                variant={adjustMode === "remove" ? "default" : "outline"}
+                onClick={() => setAdjustMode("remove")}
+              >
+                Remove funds
+              </Button>
+            </div>
             <div>
-              <Label htmlFor="amount">Amount (PKR)</Label>
+              <Label htmlFor="amount">
+                {adjustMode === "add" ? "Amount to add (PKR)" : "Amount to remove (PKR)"}
+              </Label>
               <Input
                 id="amount"
                 type="number"
-                step="0.01"
-                placeholder="e.g., 250.00 or -100.00"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                placeholder={adjustMode === "add" ? "e.g. 500" : "e.g. 100"}
                 value={balanceAmount}
                 onChange={(e) => setBalanceAmount(e.target.value)}
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Positive to add, negative to remove
-              </p>
+              {adjustPreviewPkr !== null ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  New balance after adjustment:{" "}
+                  <span className="font-medium text-foreground">
+                    {formatBalancePkr(adjustPreviewPkr)}
+                  </span>
+                </p>
+              ) : balanceAmount && adjustMode === "remove" ? (
+                <p className="mt-1 text-xs text-red-400">
+                  Amount exceeds current balance.
+                </p>
+              ) : null}
             </div>
             <div>
               <Label htmlFor="balance-reason">Reason</Label>
               <textarea
                 id="balance-reason"
-                placeholder="Enter reason for balance adjustment..."
+                placeholder="e.g. Manual correction, promo credit, refund fix…"
                 value={balanceReason}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setBalanceReason(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setBalanceReason(e.target.value)
+                }
                 className="min-h-[100px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               />
             </div>
@@ -614,8 +694,16 @@ export default function AdminUsersPage(): React.ReactElement {
             <Button variant="outline" onClick={() => setBalanceModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAdjustBalance} disabled={isAdjusting}>
-              {isAdjusting ? "Adjusting..." : "Adjust Balance"}
+            <Button
+              onClick={handleAdjustBalance}
+              disabled={isAdjusting || adjustPreviewPkr === null || !balanceReason.trim()}
+              variant={adjustMode === "remove" ? "destructive" : "default"}
+            >
+              {isAdjusting
+                ? "Saving…"
+                : adjustMode === "add"
+                  ? "Add funds"
+                  : "Remove funds"}
             </Button>
           </DialogFooter>
         </DialogContent>

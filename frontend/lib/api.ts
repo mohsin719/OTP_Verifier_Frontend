@@ -16,6 +16,51 @@ type ApiFetchOptions = RequestInit & {
 const DEFAULT_CACHE_TTL_MS = 4000;
 export const AUTH_UNAUTHORIZED_EVENT = 'vsms:auth-unauthorized';
 
+/** Map low-level fetch/network errors to calm, user-facing copy (no dev jargon). */
+export function toUserFriendlyApiError(raw: unknown): string {
+  const message =
+    raw instanceof Error ? raw.message : typeof raw === 'string' ? raw : '';
+
+  const lower = message.toLowerCase();
+
+  if (
+    message === 'Failed to fetch' ||
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('network request failed') ||
+    lower.includes('load failed') ||
+    lower.includes('connection refused') ||
+    lower.includes('err_connection_refused') ||
+    lower.includes('could not connect') ||
+    lower.includes('api server')
+  ) {
+    return "We couldn't reach US Num HUB right now. Please check your internet connection and try again in a moment.";
+  }
+
+  if (
+    lower.includes('aborted') ||
+    lower.includes('abort') ||
+    lower.includes('timeout') ||
+    lower.includes('timed out')
+  ) {
+    return 'This is taking longer than usual. Please try again in a few seconds.';
+  }
+
+  if (
+    lower.includes('request failed after retries') ||
+    lower.includes('service unavailable') ||
+    lower.includes('internal server error')
+  ) {
+    return 'US Num HUB is temporarily busy. Please wait a few seconds and try again.';
+  }
+
+  if (message.trim().length > 0) {
+    return message;
+  }
+
+  return 'Something went wrong. Please try again in a moment.';
+}
+
 async function persistRefreshedSession(
   accessToken: string,
   user?: AuthUser,
@@ -190,9 +235,42 @@ export async function apiFetch<T>(
           ...requestInit,
           headers,
           credentials: 'include', // CRITICAL: Send cookies
+          cache: 'no-store',
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
+
+        // Express may still return 304 for conditional requests — retry without cache validators.
+        if (res.status === 304) {
+          const retryHeaders = new Headers(headers);
+          retryHeaders.delete('If-None-Match');
+          retryHeaders.delete('If-Modified-Since');
+          const retryRes = await fetch(url, {
+            ...requestInit,
+            headers: retryHeaders,
+            credentials: 'include',
+            cache: 'no-store',
+          });
+          const retryJson: unknown = await retryRes.json().catch(() => null);
+          if (retryRes.ok) {
+            const parsed = parseEnvelope(retryJson);
+            if (!parsed.ok) {
+              return { success: false, error: parsed.error };
+            }
+            const result: ApiResult<T> = {
+              success: true,
+              data: parsed.data as T,
+            };
+            if (canUseGetDedupe && cacheTtlMs > 0) {
+              recentGetCache.set(cacheKey, {
+                expiresAt: Date.now() + cacheTtlMs,
+                value: result,
+              });
+            }
+            return result;
+          }
+        }
+
         const json: unknown = await res.json().catch(() => null);
 
         if (!res.ok) {
@@ -210,6 +288,7 @@ export async function apiFetch<T>(
                 ...requestInit,
                 headers,
                 credentials: 'include',
+                cache: 'no-store',
               });
               const retryJson: unknown = await retryRes.json().catch(() => null);
 
@@ -262,7 +341,13 @@ export async function apiFetch<T>(
           }
 
           const msg = extractErrorMessage(json, res.status);
-          return { success: false, error: msg };
+          return {
+            success: false,
+            error:
+              res.status >= 500
+                ? toUserFriendlyApiError(msg)
+                : msg,
+          };
         }
 
         const parsed = parseEnvelope(json);
@@ -283,15 +368,18 @@ export async function apiFetch<T>(
           await new Promise((r) => setTimeout(r, 500 * (i + 1)));
           continue;
         }
-        const message = e instanceof Error ? e.message : 'Network error';
-        const friendlyMessage =
-          message === 'Failed to fetch' || message.includes('fetch')
-            ? 'Could not connect to the API server. Please check that the backend is running (port 4000).'
-            : message;
-        return { success: false, error: friendlyMessage };
+        return {
+          success: false,
+          error: toUserFriendlyApiError(
+            e instanceof Error ? e : 'Network error',
+          ),
+        };
       }
     }
-    return { success: false, error: 'Request failed after retries' };
+    return {
+      success: false,
+      error: toUserFriendlyApiError('Request failed after retries'),
+    };
   })();
 
   if (canUseGetDedupe) {
