@@ -5,6 +5,7 @@ const PRODUCTION_PUBLIC_ENV = {
   NEXT_PUBLIC_API_URL: "https://api.usnumhub.com/api",
   NEXT_PUBLIC_WS_URL: "https://api.usnumhub.com",
   NEXT_PUBLIC_SITE_URL: "https://usnumhub.com",
+  GOOGLE_SITE_VERIFICATION: "sTEZQAHJk6oxje0-o9eXW7r11qn7dW3EwvILf34H2tQ",
 };
 
 function loadDotEnv(filePath) {
