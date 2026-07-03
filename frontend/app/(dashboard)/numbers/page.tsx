@@ -147,6 +147,7 @@ function NumbersPageContent() {
   const {
     data: fetchedActive,
     isLoading,
+    isValidating,
     mutate: refresh,
   } = useApi<ActiveNumber | null>("/api/numbers/active", {
     disableDedupe: true,
@@ -191,7 +192,12 @@ function NumbersPageContent() {
   const [rechargeServicePrice, setRechargeServicePrice] = useState<number | undefined>(undefined);
   const [rechargeDescription, setRechargeDescription] = useState<string | undefined>(undefined);
   const rawActive = optimisticActive ?? fetchedActive ?? null;
-  const showInitialSkeleton = isLoading && !rawActive;
+  const awaitingActiveRevalidation =
+    Boolean(token) &&
+    isValidating &&
+    fetchedActive === undefined &&
+    optimisticActive === null;
+  const showInitialSkeleton = (isLoading && !rawActive) || awaitingActiveRevalidation;
   const fetchWalletBalance = useWalletStore((s) => s.fetchBalance);
 
   const syncWalletAfterRefund = useCallback(async () => {
