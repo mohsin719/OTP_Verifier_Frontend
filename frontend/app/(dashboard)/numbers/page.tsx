@@ -48,10 +48,70 @@ type ActiveNumber = {
   isLiveLease?: boolean;
 };
 
+type SwapIssueOption = {
+  id: string;
+  label: string;
+  reason: string;
+  suggestion: string;
+  postAssignSuggestion?: string;
+};
+
 const LEASE_TTL_MINUTES = 10;
 /** Silent background sync while waiting for OTP — does not affect Refresh Status button. */
 const BACKGROUND_SYNC_INTERVAL_MS = 10_000;
 const LEASE_EXPIRED_TOAST_ID = "lease-expired-toast";
+const SWAP_ISSUE_OPTIONS: SwapIssueOption[] = [
+  {
+    id: "already-used",
+    label: "Platform says number is already used",
+    reason: "already in use on platform",
+    suggestion: "This option enables protected replacement logic. If OTP was not received, no extra charge is applied.",
+    postAssignSuggestion: "Use the new number immediately. If platform still shows already-used, switch once more and avoid reusing this number.",
+  },
+  {
+    id: "unfortunately-error",
+    label: "Platform shows 'Unfortunately, we can't create your account'",
+    reason: "account blocked / unfortunate error",
+    suggestion: "Use a clean browser profile + stable US residential VPN + fresh account details before retrying.",
+    postAssignSuggestion: "Switch to Incognito (no extensions), use stable US VPN, clear Walmart cookies, then retry once.",
+  },
+  {
+    id: "walmart-csp-block",
+    label: "Walmart shows CSP / script blocked / security error",
+    reason: "walmart browser security csp blocked",
+    suggestion: "This is usually browser environment blocking, not number failure. Use clean browser context first.",
+    postAssignSuggestion:
+      "Close extensions, use Incognito/new Chrome profile, keep only 1 tab, and retry on Walmart with stable US VPN.",
+  },
+  {
+    id: "no-otp",
+    label: "No OTP received",
+    reason: "no otp received",
+    suggestion: "Trigger 'Resend OTP' on the platform first. If still no SMS, switch number.",
+    postAssignSuggestion: "Trigger resend once on the platform. If no OTP within 30-60 seconds, switch number again.",
+  },
+  {
+    id: "invalid-otp",
+    label: "OTP received but platform rejected it",
+    reason: "otp invalid on platform",
+    suggestion: "Make sure latest OTP is entered. If rejected repeatedly, switch number and try once.",
+    postAssignSuggestion: "Paste only the latest OTP. If platform still rejects it, retry with a fresh number and new resend.",
+  },
+  {
+    id: "slow-delivery",
+    label: "OTP delivery is too slow / expired",
+    reason: "slow otp delivery",
+    suggestion: "Switch early when countdown is low to avoid expiry and refund-delay cycles.",
+    postAssignSuggestion: "Use the new number immediately and request OTP quickly to avoid timer expiry.",
+  },
+  {
+    id: "other",
+    label: "Other issue",
+    reason: "number not working / other issue",
+    suggestion: "Report submitted. A new number will be assigned now.",
+    postAssignSuggestion: "Try once with the new number. If issue repeats, report exact platform message in next swap.",
+  },
+];
 
 function normalizeServiceType(rawPlatform: string | null): string {
   if (!rawPlatform) {
@@ -112,8 +172,13 @@ function NumbersPageContent() {
   const [loadingChangeNumber, setLoadingChangeNumber] = useState(false);
   const [expectedOtpLength] = useState(6);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showSwapConfirmDialog, setShowSwapConfirmDialog] = useState(false);
   const [showSwapDialog, setShowSwapDialog] = useState(false);
   const [showPostOtpChangeDialog, setShowPostOtpChangeDialog] = useState(false);
+  const [selectedSwapIssueId, setSelectedSwapIssueId] = useState<string | null>(
+    null,
+  );
+  const [pageSuggestion, setPageSuggestion] = useState<string | null>(null);
   const [showRechargePopup, setShowRechargePopup] = useState(false);
   const [rechargeServicePrice, setRechargeServicePrice] = useState<number | undefined>(undefined);
   const [rechargeDescription, setRechargeDescription] = useState<string | undefined>(undefined);
@@ -172,6 +237,9 @@ function NumbersPageContent() {
       : preferredPlatform;
   const activePlatformVisual = getPlatformVisual(activePlatform);
   const activeSessionPrice = getPlatformPricePkr(activePlatform);
+  const selectedSwapIssue =
+    SWAP_ISSUE_OPTIONS.find((option) => option.id === selectedSwapIssueId) ??
+    null;
 
   /** User explicitly picked another platform on the Platforms page. */
   const intentionalPlatformSwitch =
@@ -579,66 +647,11 @@ function NumbersPageContent() {
     [syncWalletBalance, revalidateActive, serviceType],
   );
 
-  const replaceActiveNumber = useCallback(async () => {
-    if (!token) return false;
-
-    if (checkBalanceRequirement(servicePrice)) {
-      openRechargePopup(servicePrice, "Insufficient funds for this platform.");
-      return false;
-    }
-
-    setPending(true);
-    try {
-      const res = await apiFetch<{
-        phoneNumber: string;
-        leasedUntil: string;
-        otpRequestId: string;
-        leaseId?: string;
-      }>("/api/numbers/change", {
-        method: "POST",
-        accessToken: token,
-        body: JSON.stringify({ serviceType }),
-      });
-
-      if (!res.success) {
-        if (res.error === "INSUFFICIENT_BALANCE") {
-          openRechargePopup(servicePrice, "Insufficient funds for this platform.");
-          return false;
-        }
-        toast.error(res.error);
-        return false;
-      }
-
-      assignActiveNumber(res.data);
-      toast.success(
-        platformMismatch
-          ? `Switched to ${selectedPlatformVisual.displayName}. Your previous number was cancelled and refunded.`
-          : "Number changed successfully! New number assigned.",
-      );
-      return true;
-    } catch (err) {
-      console.error("Replace number failed:", err);
-      toast.error("Failed to get a new number. Please try again.");
-      return false;
-    } finally {
-      setPending(false);
-    }
-  }, [
-    token,
-    serviceType,
-    servicePrice,
-    checkBalanceRequirement,
-    openRechargePopup,
-    assignActiveNumber,
-    platformMismatch,
-    selectedPlatformVisual.displayName,
-  ]);
-
   const acquire = useCallback(async () => {
     if (!token) return;
 
     if (rawActive && (platformMismatch || !hasReceivedOtp)) {
-      await replaceActiveNumber();
+      setShowSwapConfirmDialog(true);
       return;
     }
 
@@ -665,6 +678,10 @@ function NumbersPageContent() {
         openRechargePopup(servicePrice, "Insufficient funds for this platform.");
         return;
       }
+      if (res.error?.toLowerCase().includes("too many number operations")) {
+        toast.error("Please wait 60 seconds before requesting another number.");
+        return;
+      }
       if (
         res.error === "Please wait a moment before requesting another number."
       ) {
@@ -675,6 +692,7 @@ function NumbersPageContent() {
       return;
     }
     toast.success("Virtual number assigned!");
+    setPageSuggestion(null);
     assignActiveNumber(res.data);
     
     // Use response data directly - no need for refresh or delay
@@ -684,7 +702,6 @@ function NumbersPageContent() {
     rawActive,
     hasReceivedOtp,
     platformMismatch,
-    replaceActiveNumber,
     serviceType,
     servicePrice,
     checkBalanceRequirement,
@@ -762,7 +779,7 @@ function NumbersPageContent() {
     leaseRemainingSec,
   ]);
 
-  const releaseActiveNumber = useCallback(async () => {
+  const releaseActiveNumber = useCallback(async (reason?: string) => {
     if (!token) return;
     
     setLoadingRefresh(true);
@@ -773,6 +790,7 @@ function NumbersPageContent() {
       }>("/api/numbers/release", {
         method: "POST",
         accessToken: token,
+        body: reason ? JSON.stringify({ reason }) : undefined,
       });
       
       if (res.success) {
@@ -807,10 +825,10 @@ function NumbersPageContent() {
 
   const handleRefundOnly = useCallback(async () => {
     setShowCancelDialog(false);
-    await releaseActiveNumber();
+    await releaseActiveNumber("no otp received");
   }, [releaseActiveNumber]);
 
-  const confirmSwapNumber = useCallback(async () => {
+  const confirmSwapNumber = useCallback(async (issue?: SwapIssueOption) => {
     if (!token) return;
 
     if (checkBalanceRequirement(servicePrice)) {
@@ -831,7 +849,10 @@ function NumbersPageContent() {
       }>("/api/numbers/change", {
         method: "POST",
         accessToken: token,
-        body: JSON.stringify({ serviceType }),
+        body: JSON.stringify({
+          serviceType,
+          ...(issue?.reason ? { reason: issue.reason } : {}),
+        }),
       });
 
       if (res.success) {
@@ -843,9 +864,14 @@ function NumbersPageContent() {
           leaseId: res.data.leaseId,
         });
         toast.success(`New number assigned! ${LEASE_TTL_MINUTES}-minute timer reset.`);
+        setPageSuggestion(issue?.postAssignSuggestion ?? null);
       } else {
         if (res.error === "INSUFFICIENT_BALANCE") {
           openRechargePopup(servicePrice, "Insufficient funds for this platform.");
+          return;
+        }
+        if (res.error?.toLowerCase().includes("too many number operations")) {
+          toast.error("Please wait 60 seconds before requesting another number.");
           return;
         }
         if (
@@ -946,6 +972,11 @@ function NumbersPageContent() {
         </CardHeader>
 
         <CardContent className="space-y-5">
+          {pageSuggestion ? (
+            <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+              <strong className="text-sky-200">Tip:</strong> {pageSuggestion}
+            </div>
+          ) : null}
           {platformMismatch && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
               You switched to{" "}
@@ -1126,7 +1157,7 @@ function NumbersPageContent() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowSwapDialog(true)}
+                    onClick={() => setShowSwapConfirmDialog(true)}
                     className="flex-1 gap-2 border-border/50"
                     disabled={loadingChangeNumber}
                   >
@@ -1298,8 +1329,8 @@ function NumbersPageContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Swap number — same price, new 10-min timer */}
-      <Dialog open={showSwapDialog} onOpenChange={setShowSwapDialog}>
+      {/* Swap confirm — old style keep/get */}
+      <Dialog open={showSwapConfirmDialog} onOpenChange={setShowSwapConfirmDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Change number?</DialogTitle>
@@ -1312,12 +1343,82 @@ function NumbersPageContent() {
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => setShowSwapDialog(false)}
+              onClick={() => setShowSwapConfirmDialog(false)}
             >
               Keep number
             </Button>
-            <Button className="flex-1" onClick={() => void confirmSwapNumber()}>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setShowSwapConfirmDialog(false);
+                setSelectedSwapIssueId(null);
+                setShowSwapDialog(true);
+              }}
+            >
               Get new number
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Swap issue report — step 2 */}
+      <Dialog open={showSwapDialog} onOpenChange={setShowSwapDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Report issue</DialogTitle>
+            <DialogDescription>
+              Select the issue you faced with the old number. We will submit the report
+              and assign a new number immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="grid gap-2">
+              {SWAP_ISSUE_OPTIONS.map((option) => {
+                const selected = option.id === selectedSwapIssue?.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setSelectedSwapIssueId(option.id)}
+                    className={cn(
+                      "rounded-lg border px-3 py-2.5 text-left text-sm transition-all",
+                      selected
+                        ? "border-primary/70 bg-primary/15 text-foreground shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
+                        : "border-border/60 bg-secondary/20 text-muted-foreground hover:border-primary/40 hover:bg-secondary/35",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedSwapIssue ? (
+              <p className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                {selectedSwapIssue.suggestion}
+              </p>
+            ) : (
+              <p className="rounded-md border border-zinc-500/20 bg-zinc-500/10 px-3 py-2 text-xs text-zinc-300">
+                Select one issue to continue.
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                setShowSwapDialog(false);
+                setShowSwapConfirmDialog(true);
+              }}
+            >
+              Back
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => selectedSwapIssue && void confirmSwapNumber(selectedSwapIssue)}
+              disabled={!selectedSwapIssue}
+            >
+              Submit Report & Get New Number
             </Button>
           </div>
         </DialogContent>
