@@ -192,12 +192,17 @@ function NumbersPageContent() {
   const [rechargeServicePrice, setRechargeServicePrice] = useState<number | undefined>(undefined);
   const [rechargeDescription, setRechargeDescription] = useState<string | undefined>(undefined);
   const rawActive = optimisticActive ?? fetchedActive ?? null;
+  const hasLoadedActiveOnceRef = useRef(false);
+  if (!hasLoadedActiveOnceRef.current && fetchedActive !== undefined) {
+    hasLoadedActiveOnceRef.current = true;
+  }
   const awaitingActiveRevalidation =
     Boolean(token) &&
     isValidating &&
     fetchedActive === undefined &&
     optimisticActive === null;
-  const showInitialSkeleton = (isLoading && !rawActive) || awaitingActiveRevalidation;
+  const showInitialSkeleton =
+    !hasLoadedActiveOnceRef.current && ((isLoading && !rawActive) || awaitingActiveRevalidation);
   const fetchWalletBalance = useWalletStore((s) => s.fetchBalance);
 
   const syncWalletAfterRefund = useCallback(async () => {
@@ -284,9 +289,24 @@ function NumbersPageContent() {
     activeServiceType !== null &&
     activeServiceType !== serviceType;
 
+  const lastStableDisplaySessionRef = useRef<ActiveNumber | null>(null);
+  useEffect(() => {
+    if (active && !platformMismatch) {
+      lastStableDisplaySessionRef.current = active;
+      return;
+    }
+    if (!loadingChangeNumber) {
+      lastStableDisplaySessionRef.current = null;
+    }
+  }, [active, platformMismatch, loadingChangeNumber]);
+
   /** Hide the previous platform session when user picks a different platform. */
   const displayActiveSession: ActiveNumber | null =
-    active && !platformMismatch ? active : null;
+    active && !platformMismatch
+      ? active
+      : loadingChangeNumber
+        ? lastStableDisplaySessionRef.current
+        : null;
 
   const displayPlatform = displayActiveSession ? activePlatform : selectedPlatform;
   const displayPlatformVisual = getPlatformVisual(displayPlatform);
