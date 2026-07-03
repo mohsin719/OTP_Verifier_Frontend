@@ -17,6 +17,8 @@ export type PlatformCard = {
   href: string;
 };
 
+export type PlatformTariffs = Record<PlatformOption, number>;
+
 /** Matches backend `platform_rules.base_cooldown_hours` defaults after successful OTP use. */
 export const PLATFORM_COOLDOWN_HOURS: Record<PlatformOption, number> = {
   Facebook: 36,
@@ -140,6 +142,33 @@ export function getPlatformVisual(platform: PlatformOption): PlatformVisual {
   };
 }
 
-export function getPlatformPricePkr(platform: PlatformOption): number {
-  return platform === "Facebook" ? 30 : 60;
+export const DEFAULT_PLATFORM_TARIFFS: PlatformTariffs = {
+  Facebook: 30,
+  Amazon: 60,
+  Walmart: 60,
+  Others: 60,
+};
+
+export function normalizePlatformTariffs(
+  raw?: Partial<{
+    facebook: number;
+    amazon: number;
+    walmart: number;
+    others: number;
+  }> | null,
+): PlatformTariffs {
+  return {
+    Facebook: Number(raw?.facebook ?? DEFAULT_PLATFORM_TARIFFS.Facebook),
+    Amazon: Number(raw?.amazon ?? DEFAULT_PLATFORM_TARIFFS.Amazon),
+    Walmart: Number(raw?.walmart ?? DEFAULT_PLATFORM_TARIFFS.Walmart),
+    Others: Number(raw?.others ?? DEFAULT_PLATFORM_TARIFFS.Others),
+  };
+}
+
+export function getPlatformPricePkr(
+  platform: PlatformOption,
+  tariffs?: PlatformTariffs,
+): number {
+  const source = tariffs ?? DEFAULT_PLATFORM_TARIFFS;
+  return source[platform];
 }

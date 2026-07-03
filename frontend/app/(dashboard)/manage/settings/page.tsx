@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { KeyRound, Loader2, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,19 @@ import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 
 type Step = "idle" | "otp-sent" | "done";
+type ServiceTariffs = {
+  facebook: number;
+  amazon: number;
+  walmart: number;
+  others: number;
+};
+
+const TARIFF_DEFAULTS: ServiceTariffs = {
+  facebook: 30,
+  amazon: 60,
+  walmart: 60,
+  others: 60,
+};
 
 export default function AdminSettingsPage() {
   const { token, user } = useAuthStore();
@@ -27,6 +40,108 @@ export default function AdminSettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [sendingOtp, setSendingOtp] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [tariffs, setTariffs] = useState<ServiceTariffs>(TARIFF_DEFAULTS);
+  const [tariffInputs, setTariffInputs] = useState<Record<keyof ServiceTariffs, string>>({
+    facebook: "30",
+    amazon: "60",
+    walmart: "60",
+    others: "60",
+  });
+  const [loadingTariffs, setLoadingTariffs] = useState(false);
+  const [savingTariffs, setSavingTariffs] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    let mounted = true;
+    setLoadingTariffs(true);
+    void apiFetch<ServiceTariffs>("/api/manage/service-tariffs", {
+      accessToken: token,
+      disableDedupe: true,
+      cacheTtlMs: 0,
+    })
+      .then((res) => {
+        if (!mounted || !res.success) {
+          if (mounted && !res.success) {
+            toast.error(res.error);
+          }
+          return;
+        }
+        const nextTariffs: ServiceTariffs = {
+          facebook: Number(res.data.facebook),
+          amazon: Number(res.data.amazon),
+          walmart: Number(res.data.walmart),
+          others: Number(res.data.others),
+        };
+        setTariffs(nextTariffs);
+        setTariffInputs({
+          facebook: String(nextTariffs.facebook),
+          amazon: String(nextTariffs.amazon),
+          walmart: String(nextTariffs.walmart),
+          others: String(nextTariffs.others),
+        });
+      })
+      .finally(() => {
+        if (mounted) {
+          setLoadingTariffs(false);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
+
+  function updateTariffInput(key: keyof ServiceTariffs, value: string): void {
+    setTariffInputs((prev) => ({
+      ...prev,
+      [key]: value.replace(/[^\d]/g, ""),
+    }));
+  }
+
+  async function handleSaveTariffs(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    if (!token) return;
+
+    const payload: ServiceTariffs = {
+      facebook: Number(tariffInputs.facebook),
+      amazon: Number(tariffInputs.amazon),
+      walmart: Number(tariffInputs.walmart),
+      others: Number(tariffInputs.others),
+    };
+
+    const invalid = Object.entries(payload).find(([, amount]) => !Number.isInteger(amount) || amount < 0 || amount > 500000);
+    if (invalid) {
+      toast.error("Each price must be an integer between 0 and 500000.");
+      return;
+    }
+
+    setSavingTariffs(true);
+    const res = await apiFetch<ServiceTariffs>("/api/manage/service-tariffs", {
+      method: "PATCH",
+      accessToken: token,
+      body: JSON.stringify(payload),
+    });
+    setSavingTariffs(false);
+
+    if (!res.success) {
+      toast.error(res.error);
+      return;
+    }
+
+    const saved = {
+      facebook: Number(res.data.facebook),
+      amazon: Number(res.data.amazon),
+      walmart: Number(res.data.walmart),
+      others: Number(res.data.others),
+    };
+    setTariffs(saved);
+    setTariffInputs({
+      facebook: String(saved.facebook),
+      amazon: String(saved.amazon),
+      walmart: String(saved.walmart),
+      others: String(saved.others),
+    });
+    toast.success("OTP service prices updated.");
+  }
 
   async function handleSendOtp(): Promise<void> {
     if (!token) return;
@@ -108,6 +223,80 @@ export default function AdminSettingsPage() {
               {user?.role}
             </span>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>OTP service pricing</CardTitle>
+          <CardDescription>
+            Set per-platform OTP charges. User wallet deduction uses these values.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={(e) => void handleSaveTariffs(e)} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="price-facebook">Facebook (Rs)</Label>
+                <Input
+                  id="price-facebook"
+                  inputMode="numeric"
+                  value={tariffInputs.facebook}
+                  onChange={(ev) => updateTariffInput("facebook", ev.target.value)}
+                  disabled={loadingTariffs || savingTariffs}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="price-amazon">Amazon (Rs)</Label>
+                <Input
+                  id="price-amazon"
+                  inputMode="numeric"
+                  value={tariffInputs.amazon}
+                  onChange={(ev) => updateTariffInput("amazon", ev.target.value)}
+                  disabled={loadingTariffs || savingTariffs}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="price-walmart">Walmart (Rs)</Label>
+                <Input
+                  id="price-walmart"
+                  inputMode="numeric"
+                  value={tariffInputs.walmart}
+                  onChange={(ev) => updateTariffInput("walmart", ev.target.value)}
+                  disabled={loadingTariffs || savingTariffs}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="price-others">Others/Default (Rs)</Label>
+                <Input
+                  id="price-others"
+                  inputMode="numeric"
+                  value={tariffInputs.others}
+                  onChange={(ev) => updateTariffInput("others", ev.target.value)}
+                  disabled={loadingTariffs || savingTariffs}
+                  required
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, Walmart Rs {tariffs.walmart}, Others Rs {tariffs.others}
+              </p>
+              <Button type="submit" disabled={loadingTariffs || savingTariffs}>
+                {savingTariffs ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving prices…
+                  </>
+                ) : (
+                  "Save OTP prices"
+                )}
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
 

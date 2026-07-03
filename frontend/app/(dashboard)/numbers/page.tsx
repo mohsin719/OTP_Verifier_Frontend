@@ -32,11 +32,14 @@ import { PlatformBanner } from "@/components/platform/platform-banner";
 import {
   getPlatformPricePkr,
   getPlatformVisual,
+  normalizePlatformTariffs,
   platformFromQueryParam,
   serviceTypeToPlatform,
+  type PlatformTariffs,
   type PlatformOption,
 } from "@/lib/platforms";
 import { cn } from "@/lib/utils";
+import { getNumberFlowErrorMessage } from "@/lib/number-errors";
 
 type ActiveNumber = {
   e164: string;
@@ -144,21 +147,25 @@ function NumbersPageContent() {
   const {
     data: fetchedActive,
     isLoading,
-    isValidating,
     mutate: refresh,
   } = useApi<ActiveNumber | null>("/api/numbers/active", {
     disableDedupe: true,
     cacheTtlMs: 0,
-    keepPreviousData: true,
+    keepPreviousData: false,
     revalidateOnMount: true,
   });
-  const lastFetchedRef = useRef<ActiveNumber | null>(null);
-  if (fetchedActive) {
-    lastFetchedRef.current = fetchedActive;
-  }
-  const stableFetchedActive =
-    fetchedActive ??
-    (isValidating ? lastFetchedRef.current : null);
+  const {
+    data: tariffPayload,
+    error: tariffError,
+    isLoading: tariffLoading,
+  } = useApi<{
+    facebook: number;
+    amazon: number;
+    walmart: number;
+    others: number;
+  }>("/api/numbers/tariffs", {
+    cacheTtlMs: 15_000,
+  });
   const { wsUrl } = getPublicEnv();
 
   const [pending, setPending] = useState(false);
@@ -183,7 +190,7 @@ function NumbersPageContent() {
   const [showRechargePopup, setShowRechargePopup] = useState(false);
   const [rechargeServicePrice, setRechargeServicePrice] = useState<number | undefined>(undefined);
   const [rechargeDescription, setRechargeDescription] = useState<string | undefined>(undefined);
-  const rawActive = optimisticActive ?? stableFetchedActive ?? null;
+  const rawActive = optimisticActive ?? fetchedActive ?? null;
   const showInitialSkeleton = isLoading && !rawActive;
   const fetchWalletBalance = useWalletStore((s) => s.fetchBalance);
 
@@ -239,8 +246,12 @@ function NumbersPageContent() {
     : activeServiceType
       ? serviceTypeToPlatform(activeServiceType)
       : preferredPlatform;
+  const platformTariffs: PlatformTariffs = useMemo(
+    () => normalizePlatformTariffs(tariffPayload),
+    [tariffPayload],
+  );
   const activePlatformVisual = getPlatformVisual(activePlatform);
-  const activeSessionPrice = getPlatformPricePkr(activePlatform);
+  const activeSessionPrice = getPlatformPricePkr(activePlatform, platformTariffs);
   const selectedSwapIssue =
     SWAP_ISSUE_OPTIONS.find((option) => option.id === selectedSwapIssueId) ??
     null;
@@ -250,16 +261,17 @@ function NumbersPageContent() {
     urlPlatform !== null &&
     active !== null &&
     activeServiceType !== null &&
-    urlPlatform !== activePlatform &&
-    preferredPlatform === urlPlatform;
+    urlPlatform !== activePlatform;
 
   const selectedPlatform: PlatformOption =
     active && activeServiceType && !intentionalPlatformSwitch
       ? activePlatform
       : (urlPlatform ?? preferredPlatform);
   const selectedPlatformVisual = getPlatformVisual(selectedPlatform);
+  const walmartMaintenanceMode = selectedPlatform === "Walmart";
   const serviceType = normalizeServiceType(selectedPlatform);
-  const servicePrice = getPlatformPricePkr(selectedPlatform);
+  const servicePrice = getPlatformPricePkr(selectedPlatform, platformTariffs);
+  const pricingUnavailable = Boolean(token) && Boolean(tariffError);
 
   const platformMismatch =
     Boolean(active) &&
@@ -283,8 +295,10 @@ function NumbersPageContent() {
     async (revalidate = true) => {
       setOptimisticActive(null);
       setPolledOtp(null);
+      currentDisplayE164Ref.current = null;
+      currentDisplayOtpRequestIdRef.current = null;
+      otpAnnouncedRef.current = null;
       setHideCompletedSession(false);
-      lastFetchedRef.current = null;
       await refresh(null, { revalidate });
     },
     [refresh],
@@ -319,6 +333,12 @@ function NumbersPageContent() {
         { accessToken: token, disableDedupe: true, cacheTtlMs: 0 },
       );
       if (pollRes.success && pollRes.data?.status === "received" && pollRes.data.otp) {
+        if (
+          currentDisplayE164Ref.current !== rawActive.e164 ||
+          currentDisplayOtpRequestIdRef.current !== rawActive.otpRequestId
+        ) {
+          return;
+        }
         expireHandledRef.current = null;
         setPolledOtp(pollRes.data.otp);
         await refresh();
@@ -338,6 +358,12 @@ function NumbersPageContent() {
           statusRes.data?.otpCode &&
           statusRes.data.status === "RECEIVED"
         ) {
+          if (
+            currentDisplayE164Ref.current !== rawActive.e164 ||
+            currentDisplayOtpRequestIdRef.current !== rawActive.otpRequestId
+          ) {
+            return;
+          }
           expireHandledRef.current = null;
           setPolledOtp(statusRes.data.otpCode);
           await refresh();
@@ -478,11 +504,27 @@ function NumbersPageContent() {
       setWsConnected(false);
       setWsUnavailable(true);
     };
-    const onOtpReceived = (payload?: { otp?: string }) => {
+    const onOtpReceived = (
+      payload?: { otp?: string; phoneNumber?: string; otpRequestId?: string },
+    ) => {
+      const currentE164 = currentDisplayE164Ref.current;
+      const currentOtpRequestId = currentDisplayOtpRequestIdRef.current;
+      const incomingOtp = payload?.otp;
+      if (!currentE164 || !currentOtpRequestId) {
+        return;
+      }
+      if (!incomingOtp || !payload?.phoneNumber || !payload.otpRequestId) {
+        return;
+      }
+      if (payload.phoneNumber !== currentE164) {
+        return;
+      }
+      if (payload.otpRequestId !== currentOtpRequestId) {
+        return;
+      }
+      const incomingOtpSafe: string = incomingOtp;
       startTransition(() => {
-        if (payload?.otp) {
-          setPolledOtp(payload.otp);
-        }
+        setPolledOtp(incomingOtpSafe);
         setOtpFlash(true);
       });
       revalidateActive();
@@ -529,6 +571,14 @@ function NumbersPageContent() {
   // even if socket room handoff races with initial webhook emit.
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const currentDisplayE164Ref = useRef<string | null>(null);
+  const currentDisplayOtpRequestIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    currentDisplayE164Ref.current = displayActiveSession?.e164 ?? null;
+    currentDisplayOtpRequestIdRef.current =
+      displayActiveSession?.otpRequestId ?? null;
+  }, [displayActiveSession?.e164, displayActiveSession?.otpRequestId]);
 
   useEffect(() => {
     const awaitingOtp =
@@ -546,6 +596,7 @@ function NumbersPageContent() {
       return;
     }
     const e164 = displayActiveSession.e164;
+    const otpRequestId = displayActiveSession.otpRequestId;
 
     const doPoll = async () => {
       // Cancel previous request if still pending
@@ -562,6 +613,12 @@ function NumbersPageContent() {
           cacheTtlMs: 0,
         });
         if (!controller.signal.aborted && res.success && res.data?.status === "received") {
+          if (
+            currentDisplayE164Ref.current !== e164 ||
+            currentDisplayOtpRequestIdRef.current !== otpRequestId
+          ) {
+            return;
+          }
           if (otpAnnouncedRef.current === e164) {
             return;
           }
@@ -590,7 +647,14 @@ function NumbersPageContent() {
         abortControllerRef.current = null;
       }
     };
-  }, [displayActiveSession?.e164, displayActiveSession?.otpStatus, displayOtp, token, revalidateActive]);
+  }, [
+    displayActiveSession?.e164,
+    displayActiveSession?.otpRequestId,
+    displayActiveSession?.otpStatus,
+    displayOtp,
+    token,
+    revalidateActive,
+  ]);
 
   const previousE164Ref = useRef<string | null>(null);
   useEffect(() => {
@@ -664,6 +728,14 @@ function NumbersPageContent() {
 
   const acquire = useCallback(async () => {
     if (!token) return;
+    if (walmartMaintenanceMode) {
+      toast.error("Walmart OTP is temporarily unavailable due to maintenance.");
+      return;
+    }
+    if (pricingUnavailable || tariffLoading || !tariffPayload) {
+      toast.error("Pricing is temporarily unavailable. Please try again shortly.");
+      return;
+    }
 
     if (rawActive && (platformMismatch || !hasReceivedOtp)) {
       setShowSwapConfirmDialog(true);
@@ -693,14 +765,9 @@ function NumbersPageContent() {
         openRechargePopup(servicePrice, "Insufficient funds for this platform.");
         return;
       }
-      if (res.error?.toLowerCase().includes("too many number operations")) {
-        toast.error("Please wait 60 seconds before requesting another number.");
-        return;
-      }
-      if (
-        res.error === "Please wait a moment before requesting another number."
-      ) {
-        toast.error("Please wait about 60 seconds before getting another number.");
+      const mappedError = getNumberFlowErrorMessage(res.error);
+      if (mappedError) {
+        toast.error(mappedError);
         return;
       }
       toast.error(res.error);
@@ -722,6 +789,10 @@ function NumbersPageContent() {
     checkBalanceRequirement,
     openRechargePopup,
     assignActiveNumber,
+    pricingUnavailable,
+    tariffLoading,
+    tariffPayload,
+    walmartMaintenanceMode,
   ]);
 
   const copyNumber = useCallback(() => {
@@ -750,6 +821,12 @@ function NumbersPageContent() {
       });
 
       if (res.success && res.data?.status === "RECEIVED" && res.data.otpCode) {
+        if (
+          currentDisplayE164Ref.current !== active.e164 ||
+          currentDisplayOtpRequestIdRef.current !== active.otpRequestId
+        ) {
+          return;
+        }
         setPolledOtp(res.data.otpCode);
         revalidateActive();
         setOtpFlash(true);
@@ -765,11 +842,19 @@ function NumbersPageContent() {
       });
 
       if (pollRes.success && pollRes.data?.status === "received" && pollRes.data.otp) {
+        if (
+          currentDisplayE164Ref.current !== active.e164 ||
+          currentDisplayOtpRequestIdRef.current !== active.otpRequestId
+        ) {
+          return;
+        }
         setPolledOtp(pollRes.data.otp);
         revalidateActive();
         setOtpFlash(true);
         setTimeout(() => setOtpFlash(false), 2500);
         toast.success("OTP recovered from latest webhook event!");
+      } else if (!pollRes.success && pollRes.error === "OTP_POLL_TEMPORARILY_UNAVAILABLE") {
+        toast.error("OTP status is temporarily unavailable. Please retry in a moment.");
       } else if (isWaitingForOtp || leaseRemainingSec > 0) {
         toast.info(
           `Please wait up to ${LEASE_TTL_MINUTES} minutes for the OTP. ${formatCountdown(leaseRemainingSec)} remaining on this number.`,
@@ -797,6 +882,11 @@ function NumbersPageContent() {
   const releaseActiveNumber = useCallback(async (reason?: string) => {
     if (!token) return;
     
+    // Block stale websocket/poll responses from showing OTP flash after cancel.
+    currentDisplayE164Ref.current = null;
+    currentDisplayOtpRequestIdRef.current = null;
+    otpAnnouncedRef.current = null;
+    setPolledOtp(null);
     setLoadingRefresh(true);
     try {
       const res = await apiFetch<{
@@ -845,6 +935,14 @@ function NumbersPageContent() {
 
   const confirmSwapNumber = useCallback(async (issue?: SwapIssueOption) => {
     if (!token) return;
+    if (walmartMaintenanceMode) {
+      toast.error("Walmart OTP is temporarily unavailable due to maintenance.");
+      return;
+    }
+    if (pricingUnavailable || tariffLoading || !tariffPayload) {
+      toast.error("Pricing is temporarily unavailable. Please try again shortly.");
+      return;
+    }
 
     if (checkBalanceRequirement(servicePrice)) {
       openRechargePopup(servicePrice, "Insufficient funds for this platform.");
@@ -885,14 +983,9 @@ function NumbersPageContent() {
           openRechargePopup(servicePrice, "Insufficient funds for this platform.");
           return;
         }
-        if (res.error?.toLowerCase().includes("too many number operations")) {
-          toast.error("Please wait 60 seconds before requesting another number.");
-          return;
-        }
-        if (
-          res.error === "Please wait a moment before requesting another number."
-        ) {
-          toast.error("Please wait about 60 seconds before getting another number.");
+        const mappedError = getNumberFlowErrorMessage(res.error);
+        if (mappedError) {
+          toast.error(mappedError);
           return;
         }
         toast.error(res.error || "Failed to change number");
@@ -910,6 +1003,10 @@ function NumbersPageContent() {
     checkBalanceRequirement,
     openRechargePopup,
     assignActiveNumber,
+    pricingUnavailable,
+    tariffLoading,
+    tariffPayload,
+    walmartMaintenanceMode,
   ]);
 
   const confirmPostOtpChange = useCallback(async () => {
@@ -952,6 +1049,16 @@ function NumbersPageContent() {
           mode={displayActiveSession ? "active" : "selected"}
           pricePkr={servicePrice}
         />
+        {pricingUnavailable ? (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            Pricing is temporarily unavailable. Number actions are paused until pricing sync recovers.
+          </div>
+        ) : null}
+        {walmartMaintenanceMode ? (
+          <div className="rounded-md border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            Walmart OTP service is temporarily under maintenance. Please use Facebook, Amazon, or Others for now.
+          </div>
+        ) : null}
       </div>
 
       {/* Active Number Card */}
@@ -1174,7 +1281,13 @@ function NumbersPageContent() {
                     size="sm"
                     onClick={() => setShowSwapConfirmDialog(true)}
                     className="flex-1 gap-2 border-border/50"
-                    disabled={loadingChangeNumber}
+                    disabled={
+                      loadingChangeNumber ||
+                      walmartMaintenanceMode ||
+                      pricingUnavailable ||
+                      tariffLoading ||
+                      !tariffPayload
+                    }
                   >
                     {loadingChangeNumber ? (
                       <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1193,7 +1306,13 @@ function NumbersPageContent() {
                     size="sm"
                     onClick={() => setHideCompletedSession(true)}
                     className="flex-1 gap-2 border-border/50"
-                    disabled={loadingChangeNumber}
+                    disabled={
+                      loadingChangeNumber ||
+                      walmartMaintenanceMode ||
+                      pricingUnavailable ||
+                      tariffLoading ||
+                      !tariffPayload
+                    }
                   >
                     Back
                   </Button>
@@ -1202,7 +1321,13 @@ function NumbersPageContent() {
                     size="sm"
                     onClick={() => setShowPostOtpChangeDialog(true)}
                     className="flex-1 gap-2 border-border/50"
-                    disabled={loadingChangeNumber}
+                    disabled={
+                      loadingChangeNumber ||
+                      walmartMaintenanceMode ||
+                      pricingUnavailable ||
+                      tariffLoading ||
+                      !tariffPayload
+                    }
                   >
                     {loadingChangeNumber ? (
                       <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1258,7 +1383,13 @@ function NumbersPageContent() {
           {(!isWaitingForOtp && (!displayActiveSession || sessionComplete || platformMismatch)) && (
             <Button
               onClick={() => void acquire()}
-              disabled={pending}
+              disabled={
+                pending ||
+                walmartMaintenanceMode ||
+                pricingUnavailable ||
+                tariffLoading ||
+                !tariffPayload
+              }
               className="w-full gap-2 font-semibold relative overflow-hidden group"
               size="lg"
             >
@@ -1442,7 +1573,14 @@ function NumbersPageContent() {
             <Button
               className="flex-1"
               onClick={() => selectedSwapIssue && void confirmSwapNumber(selectedSwapIssue)}
-              disabled={!selectedSwapIssue}
+              disabled={
+                !selectedSwapIssue ||
+                loadingChangeNumber ||
+                walmartMaintenanceMode ||
+                pricingUnavailable ||
+                tariffLoading ||
+                !tariffPayload
+              }
             >
               Submit Report & Get New Number
             </Button>
@@ -1468,7 +1606,17 @@ function NumbersPageContent() {
             >
               Cancel
             </Button>
-            <Button className="flex-1" onClick={() => void confirmPostOtpChange()}>
+            <Button
+              className="flex-1"
+              onClick={() => void confirmPostOtpChange()}
+              disabled={
+                loadingChangeNumber ||
+                walmartMaintenanceMode ||
+                pricingUnavailable ||
+                tariffLoading ||
+                !tariffPayload
+              }
+            >
               Change Number
             </Button>
           </div>
