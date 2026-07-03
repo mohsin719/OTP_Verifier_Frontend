@@ -170,6 +170,7 @@ function NumbersPageContent() {
   const [optimisticActive, setOptimisticActive] = useState<ActiveNumber | null>(null);
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [loadingChangeNumber, setLoadingChangeNumber] = useState(false);
+  const [hideCompletedSession, setHideCompletedSession] = useState(false);
   const [expectedOtpLength] = useState(6);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showSwapConfirmDialog, setShowSwapConfirmDialog] = useState(false);
@@ -217,6 +218,9 @@ function NumbersPageContent() {
     if (!rawActive) {
       return null;
     }
+    if (hideCompletedSession && hasReceivedOtp) {
+      return null;
+    }
     const remaining = rawActive.leasedUntil
       ? secondsUntil(rawActive.leasedUntil)
       : 0;
@@ -224,7 +228,7 @@ function NumbersPageContent() {
       return null;
     }
     return rawActive;
-  }, [rawActive, hasReceivedOtp]);
+  }, [rawActive, hasReceivedOtp, hideCompletedSession]);
 
   const activeServiceType = rawActive?.serviceType
     ? normalizeServiceType(rawActive.serviceType)
@@ -279,6 +283,7 @@ function NumbersPageContent() {
     async (revalidate = true) => {
       setOptimisticActive(null);
       setPolledOtp(null);
+      setHideCompletedSession(false);
       lastFetchedRef.current = null;
       await refresh(null, { revalidate });
     },
@@ -602,6 +607,16 @@ function NumbersPageContent() {
       previousE164Ref.current = e164;
     }
   }, [active?.e164]);
+
+  useEffect(() => {
+    if (!rawActive?.e164) {
+      setHideCompletedSession(false);
+      return;
+    }
+    if (rawActive.e164 !== previousE164Ref.current) {
+      setHideCompletedSession(false);
+    }
+  }, [rawActive?.e164]);
 
   const copyToClipboard = useCallback(
     async (value: string, successMessage: string): Promise<boolean> => {
@@ -1172,20 +1187,31 @@ function NumbersPageContent() {
               )}
 
               {hasReceivedOtp && isLiveLease && !sessionComplete && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPostOtpChangeDialog(true)}
-                  className="mt-4 gap-2 w-full border-border/50"
-                  disabled={loadingChangeNumber}
-                >
-                  {loadingChangeNumber ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  {loadingChangeNumber ? "Changing…" : "Change Number"}
-                </Button>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setHideCompletedSession(true)}
+                    className="flex-1 gap-2 border-border/50"
+                    disabled={loadingChangeNumber}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPostOtpChangeDialog(true)}
+                    className="flex-1 gap-2 border-border/50"
+                    disabled={loadingChangeNumber}
+                  >
+                    {loadingChangeNumber ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    {loadingChangeNumber ? "Changing…" : "Change Number"}
+                  </Button>
+                </div>
               )}
               </div>
 
