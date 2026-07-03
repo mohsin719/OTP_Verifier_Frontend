@@ -1094,7 +1094,7 @@ function NumbersPageContent() {
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {pageSuggestion ? (
+          {pageSuggestion && displayActiveSession ? (
             <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
               <strong className="text-sky-200">Tip:</strong> {pageSuggestion}
             </div>
@@ -1380,7 +1380,9 @@ function NumbersPageContent() {
           )}
 
           {/* Acquire — only when no live lease or session complete */}
-          {(!isWaitingForOtp && (!displayActiveSession || sessionComplete || platformMismatch)) && (
+          {(!showInitialSkeleton &&
+            !isWaitingForOtp &&
+            (!displayActiveSession || sessionComplete || platformMismatch)) && (
             <Button
               onClick={() => void acquire()}
               disabled={
