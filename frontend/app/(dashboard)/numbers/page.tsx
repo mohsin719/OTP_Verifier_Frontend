@@ -48,6 +48,7 @@ type ActiveNumber = {
   otpStatus: "PENDING" | "RECEIVED" | "EXPIRED" | "FAILED";
   otpRequestId: string;
   serviceType?: string | null;
+  chargedAmountPkr?: number | null;
   isLiveLease?: boolean;
 };
 
@@ -159,13 +160,21 @@ function NumbersPageContent() {
     data: tariffPayload,
     error: tariffError,
     isLoading: tariffLoading,
+    mutate: refreshTariffs,
   } = useApi<{
     facebook: number;
     amazon: number;
     walmart: number;
+    walmartFivesim: number;
+    walmartNextPrice?: number;
+    walmartAttemptCount?: number;
+    walmartNextProvider?: "SMSBOWER" | "FIVESIM";
     others: number;
   }>("/api/numbers/tariffs", {
-    cacheTtlMs: 15_000,
+    // Per-user Walmart next price changes after each no-OTP event, so always fetch fresh.
+    cacheTtlMs: 0,
+    disableDedupe: true,
+    revalidateOnMount: true,
   });
   const { wsUrl } = getPublicEnv();
 
@@ -191,7 +200,17 @@ function NumbersPageContent() {
   const [showRechargePopup, setShowRechargePopup] = useState(false);
   const [rechargeServicePrice, setRechargeServicePrice] = useState<number | undefined>(undefined);
   const [rechargeDescription, setRechargeDescription] = useState<string | undefined>(undefined);
-  const rawActive = optimisticActive ?? fetchedActive ?? null;
+  const lastStableFetchedActiveRef = useRef<ActiveNumber | null>(null);
+  useEffect(() => {
+    if (fetchedActive !== undefined) {
+      lastStableFetchedActiveRef.current = fetchedActive ?? null;
+    }
+  }, [fetchedActive]);
+  const stableFetchedActive =
+    fetchedActive === undefined && isValidating
+      ? lastStableFetchedActiveRef.current
+      : (fetchedActive ?? null);
+  const rawActive = optimisticActive ?? stableFetchedActive ?? null;
   const hasLoadedActiveOnceRef = useRef(false);
   if (!hasLoadedActiveOnceRef.current && fetchedActive !== undefined) {
     hasLoadedActiveOnceRef.current = true;
@@ -261,8 +280,15 @@ function NumbersPageContent() {
     () => normalizePlatformTariffs(tariffPayload),
     [tariffPayload],
   );
+  const walmartFivesimPrice = Number(tariffPayload?.walmartFivesim ?? 75);
+  const walmartAttemptCount = Number(tariffPayload?.walmartAttemptCount ?? 0);
+  const walmartNextAttemptInCycle = (walmartAttemptCount % 3) + 1;
   const activePlatformVisual = getPlatformVisual(activePlatform);
   const activeSessionPrice = getPlatformPricePkr(activePlatform, platformTariffs);
+  const cancelRefundAmount =
+    typeof active?.chargedAmountPkr === "number" && active.chargedAmountPkr > 0
+      ? active.chargedAmountPkr
+      : activeSessionPrice;
   const selectedSwapIssue =
     SWAP_ISSUE_OPTIONS.find((option) => option.id === selectedSwapIssueId) ??
     null;
@@ -279,9 +305,12 @@ function NumbersPageContent() {
       ? activePlatform
       : (urlPlatform ?? preferredPlatform);
   const selectedPlatformVisual = getPlatformVisual(selectedPlatform);
-  const walmartMaintenanceMode = selectedPlatform === "Walmart";
   const serviceType = normalizeServiceType(selectedPlatform);
-  const servicePrice = getPlatformPricePkr(selectedPlatform, platformTariffs);
+  const baseServicePrice = getPlatformPricePkr(selectedPlatform, platformTariffs);
+  const servicePrice =
+    selectedPlatform === "Walmart"
+      ? Number(tariffPayload?.walmartNextPrice ?? baseServicePrice)
+      : baseServicePrice;
   const pricingUnavailable = Boolean(token) && Boolean(tariffError);
 
   const platformMismatch =
@@ -321,13 +350,15 @@ function NumbersPageContent() {
     async (revalidate = true) => {
       setOptimisticActive(null);
       setPolledOtp(null);
+      lastStableFetchedActiveRef.current = null;
       currentDisplayE164Ref.current = null;
       currentDisplayOtpRequestIdRef.current = null;
       otpAnnouncedRef.current = null;
       setHideCompletedSession(false);
       await refresh(null, { revalidate });
+      void refreshTariffs(undefined, { revalidate: true });
     },
-    [refresh],
+    [refresh, refreshTariffs],
   );
 
   const revalidateActive = useCallback(() => {
@@ -734,6 +765,7 @@ function NumbersPageContent() {
       leasedUntil: string;
       otpRequestId: string;
       leaseId?: string;
+      chargedAmountPkr?: number;
     }) => {
       expireHandledRef.current = null;
       setOptimisticActive({
@@ -743,6 +775,8 @@ function NumbersPageContent() {
         otpStatus: "PENDING",
         otpRequestId: data.otpRequestId ?? data.leaseId ?? "pending",
         serviceType,
+        chargedAmountPkr:
+          typeof data.chargedAmountPkr === "number" ? data.chargedAmountPkr : null,
         isLiveLease: true,
       });
       setPolledOtp(null);
@@ -754,10 +788,6 @@ function NumbersPageContent() {
 
   const acquire = useCallback(async () => {
     if (!token) return;
-    if (walmartMaintenanceMode) {
-      toast.error("Walmart OTP is temporarily unavailable due to maintenance.");
-      return;
-    }
     if (pricingUnavailable || tariffLoading || !tariffPayload) {
       toast.error("Pricing is temporarily unavailable. Please try again shortly.");
       return;
@@ -780,6 +810,8 @@ function NumbersPageContent() {
       leasedUntil: string;
       otpRequestId: string;
       leaseId?: string;
+      chargedAmountPkr?: number;
+      chargeNotice?: string;
     }>("/api/numbers/acquire", {
       method: "POST",
       accessToken: token,
@@ -799,9 +831,16 @@ function NumbersPageContent() {
       toast.error(res.error);
       return;
     }
-    toast.success("Virtual number assigned!");
+    if (res.data.chargeNotice) {
+      toast.success(res.data.chargeNotice);
+    } else if (typeof res.data.chargedAmountPkr === "number" && res.data.chargedAmountPkr > 0) {
+      toast.success(`Virtual number assigned! PKR ${res.data.chargedAmountPkr} deducted.`);
+    } else {
+      toast.success("Virtual number assigned!");
+    }
     setPageSuggestion(null);
     assignActiveNumber(res.data);
+    void refreshTariffs(undefined, { revalidate: true });
     
     // Use response data directly - no need for refresh or delay
     // The backend now returns full phone data in the response
@@ -815,10 +854,10 @@ function NumbersPageContent() {
     checkBalanceRequirement,
     openRechargePopup,
     assignActiveNumber,
+    refreshTariffs,
     pricingUnavailable,
     tariffLoading,
     tariffPayload,
-    walmartMaintenanceMode,
   ]);
 
   const copyNumber = useCallback(() => {
@@ -961,10 +1000,6 @@ function NumbersPageContent() {
 
   const confirmSwapNumber = useCallback(async (issue?: SwapIssueOption) => {
     if (!token) return;
-    if (walmartMaintenanceMode) {
-      toast.error("Walmart OTP is temporarily unavailable due to maintenance.");
-      return;
-    }
     if (pricingUnavailable || tariffLoading || !tariffPayload) {
       toast.error("Pricing is temporarily unavailable. Please try again shortly.");
       return;
@@ -985,6 +1020,8 @@ function NumbersPageContent() {
         leasedUntil: string;
         otpRequestId: string;
         leaseId?: string;
+        chargedAmountPkr?: number;
+        chargeNotice?: string;
       }>("/api/numbers/change", {
         method: "POST",
         accessToken: token,
@@ -1002,8 +1039,20 @@ function NumbersPageContent() {
           otpRequestId: res.data.otpRequestId,
           leaseId: res.data.leaseId,
         });
-        toast.success(`New number assigned! ${LEASE_TTL_MINUTES}-minute timer reset.`);
+        if (res.data.chargeNotice) {
+          toast.success(`${res.data.chargeNotice} ${LEASE_TTL_MINUTES}-minute timer reset.`);
+        } else if (
+          typeof res.data.chargedAmountPkr === "number" &&
+          res.data.chargedAmountPkr > 0
+        ) {
+          toast.success(
+            `New number assigned! PKR ${res.data.chargedAmountPkr} deducted. ${LEASE_TTL_MINUTES}-minute timer reset.`,
+          );
+        } else {
+          toast.success(`New number assigned! ${LEASE_TTL_MINUTES}-minute timer reset.`);
+        }
         setPageSuggestion(issue?.postAssignSuggestion ?? null);
+        void refreshTariffs(undefined, { revalidate: true });
       } else {
         if (res.error === "INSUFFICIENT_BALANCE") {
           openRechargePopup(servicePrice, "Insufficient funds for this platform.");
@@ -1029,10 +1078,10 @@ function NumbersPageContent() {
     checkBalanceRequirement,
     openRechargePopup,
     assignActiveNumber,
+    refreshTariffs,
     pricingUnavailable,
     tariffLoading,
     tariffPayload,
-    walmartMaintenanceMode,
   ]);
 
   const confirmPostOtpChange = useCallback(async () => {
@@ -1078,11 +1127,6 @@ function NumbersPageContent() {
         {pricingUnavailable ? (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
             Pricing is temporarily unavailable. Number actions are paused until pricing sync recovers.
-          </div>
-        ) : null}
-        {walmartMaintenanceMode ? (
-          <div className="rounded-md border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-            Walmart OTP service is temporarily under maintenance. Please use Facebook, Amazon, or Others for now.
           </div>
         ) : null}
       </div>
@@ -1309,7 +1353,6 @@ function NumbersPageContent() {
                     className="flex-1 gap-2 border-border/50"
                     disabled={
                       loadingChangeNumber ||
-                      walmartMaintenanceMode ||
                       pricingUnavailable ||
                       tariffLoading ||
                       !tariffPayload
@@ -1334,7 +1377,6 @@ function NumbersPageContent() {
                     className="flex-1 gap-2 border-border/50"
                     disabled={
                       loadingChangeNumber ||
-                      walmartMaintenanceMode ||
                       pricingUnavailable ||
                       tariffLoading ||
                       !tariffPayload
@@ -1349,7 +1391,6 @@ function NumbersPageContent() {
                     className="flex-1 gap-2 border-border/50"
                     disabled={
                       loadingChangeNumber ||
-                      walmartMaintenanceMode ||
                       pricingUnavailable ||
                       tariffLoading ||
                       !tariffPayload
@@ -1409,37 +1450,48 @@ function NumbersPageContent() {
           {(!showInitialSkeleton &&
             !isWaitingForOtp &&
             (!displayActiveSession || sessionComplete || platformMismatch)) && (
-            <Button
-              onClick={() => void acquire()}
-              disabled={
-                pending ||
-                walmartMaintenanceMode ||
-                pricingUnavailable ||
-                tariffLoading ||
-                !tariffPayload
-              }
-              className="w-full gap-2 font-semibold relative overflow-hidden group"
-              size="lg"
-            >
-              <span className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-              {pending ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  {platformMismatch ? "Switching platform…" : "Reserving number…"}
-                </>
-              ) : (
-                <>
-                  <Phone className="h-4 w-4" />
-                  {platformMismatch
-                    ? hasReceivedOtp
-                      ? `Get ${selectedPlatformVisual.displayName} Number (Rs ${servicePrice})`
-                      : `Switch to ${selectedPlatformVisual.displayName} (Rs ${servicePrice})`
-                    : sessionComplete
-                      ? `Get New ${activePlatformVisual.displayName} Number (Rs ${activeSessionPrice})`
-                      : `Get ${displayPlatformVisual.displayName} Number (Rs ${servicePrice})`}
-                </>
-              )}
-            </Button>
+            <div className="space-y-2">
+              {displayPlatform === "Walmart" ? (
+                <p className="text-xs text-muted-foreground text-center">
+                  Current Walmart attempts:{" "}
+                  <strong className="text-foreground">{walmartAttemptCount}</strong> ·
+                  Next attempt:{" "}
+                  <strong className="text-foreground">
+                    {walmartNextAttemptInCycle}/3
+                  </strong>
+                </p>
+              ) : null}
+              <Button
+                onClick={() => void acquire()}
+                disabled={
+                  pending ||
+                  pricingUnavailable ||
+                  tariffLoading ||
+                  !tariffPayload
+                }
+                className="w-full gap-2 font-semibold relative overflow-hidden group"
+                size="lg"
+              >
+                <span className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                {pending ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    {platformMismatch ? "Switching platform…" : "Reserving number…"}
+                  </>
+                ) : (
+                  <>
+                    <Phone className="h-4 w-4" />
+                    {platformMismatch
+                      ? hasReceivedOtp
+                        ? `Get ${selectedPlatformVisual.displayName} Number`
+                        : `Switch to ${selectedPlatformVisual.displayName}`
+                      : sessionComplete
+                        ? `Get New ${activePlatformVisual.displayName} Number`
+                        : `Get ${displayPlatformVisual.displayName} Number`}
+                  </>
+                )}
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -1470,6 +1522,11 @@ function NumbersPageContent() {
             <li>Click <strong className="text-foreground">Copy</strong> and paste the code on {displayPlatformVisual.displayName}</li>
             <li>Number lease lasts {LEASE_TTL_MINUTES} minutes — OTP must arrive within this window</li>
             <li>If no OTP arrives in time, your Rs {servicePrice} is automatically refunded</li>
+            {displayPlatform === "Walmart" ? (
+              <>
+                <li>If OTP is not received, attempts 1-2 use SMS Bower, attempt 3 uses 5SIM (Rs {walmartFivesimPrice}), then the cycle resets to SMS Bower.</li>
+              </>
+            ) : null}
             <li>Use <strong className="text-foreground">Cancel</strong> anytime before OTP to get an instant refund</li>
             <li>Use <strong className="text-foreground">Change Number</strong> to swap to a new number (same price, timer resets)</li>
           </ol>
@@ -1491,7 +1548,7 @@ function NumbersPageContent() {
           <DialogHeader>
             <DialogTitle>Cancel number?</DialogTitle>
             <DialogDescription>
-              No OTP received yet. Cancelling will refund <strong>Rs {servicePrice}</strong> to
+              No OTP received yet. Cancelling will refund <strong>Rs {cancelRefundAmount}</strong> to
               your wallet immediately.
             </DialogDescription>
           </DialogHeader>
@@ -1508,7 +1565,7 @@ function NumbersPageContent() {
               onClick={() => void handleRefundOnly()}
               disabled={loadingRefresh}
             >
-              {loadingRefresh ? "Processing…" : `Cancel & refund Rs ${servicePrice}`}
+              {loadingRefresh ? "Processing…" : `Cancel & refund Rs ${cancelRefundAmount}`}
             </Button>
           </div>
         </DialogContent>
@@ -1604,7 +1661,6 @@ function NumbersPageContent() {
               disabled={
                 !selectedSwapIssue ||
                 loadingChangeNumber ||
-                walmartMaintenanceMode ||
                 pricingUnavailable ||
                 tariffLoading ||
                 !tariffPayload
@@ -1639,7 +1695,6 @@ function NumbersPageContent() {
               onClick={() => void confirmPostOtpChange()}
               disabled={
                 loadingChangeNumber ||
-                walmartMaintenanceMode ||
                 pricingUnavailable ||
                 tariffLoading ||
                 !tariffPayload

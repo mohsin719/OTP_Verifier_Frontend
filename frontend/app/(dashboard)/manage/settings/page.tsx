@@ -22,6 +22,7 @@ type ServiceTariffs = {
   facebook: number;
   amazon: number;
   walmart: number;
+  walmartFivesim: number;
   others: number;
 };
 
@@ -29,6 +30,7 @@ const TARIFF_DEFAULTS: ServiceTariffs = {
   facebook: 30,
   amazon: 60,
   walmart: 60,
+  walmartFivesim: 75,
   others: 60,
 };
 
@@ -45,6 +47,7 @@ export default function AdminSettingsPage() {
     facebook: "30",
     amazon: "60",
     walmart: "60",
+    walmartFivesim: "75",
     others: "60",
   });
   const [loadingTariffs, setLoadingTariffs] = useState(false);
@@ -70,6 +73,7 @@ export default function AdminSettingsPage() {
           facebook: Number(res.data.facebook),
           amazon: Number(res.data.amazon),
           walmart: Number(res.data.walmart),
+          walmartFivesim: Number(res.data.walmartFivesim),
           others: Number(res.data.others),
         };
         setTariffs(nextTariffs);
@@ -77,6 +81,7 @@ export default function AdminSettingsPage() {
           facebook: String(nextTariffs.facebook),
           amazon: String(nextTariffs.amazon),
           walmart: String(nextTariffs.walmart),
+          walmartFivesim: String(nextTariffs.walmartFivesim),
           others: String(nextTariffs.others),
         });
       })
@@ -105,6 +110,7 @@ export default function AdminSettingsPage() {
       facebook: Number(tariffInputs.facebook),
       amazon: Number(tariffInputs.amazon),
       walmart: Number(tariffInputs.walmart),
+      walmartFivesim: Number(tariffInputs.walmartFivesim),
       others: Number(tariffInputs.others),
     };
 
@@ -131,6 +137,7 @@ export default function AdminSettingsPage() {
       facebook: Number(res.data.facebook),
       amazon: Number(res.data.amazon),
       walmart: Number(res.data.walmart),
+      walmartFivesim: Number(res.data.walmartFivesim),
       others: Number(res.data.others),
     };
     setTariffs(saved);
@@ -138,6 +145,7 @@ export default function AdminSettingsPage() {
       facebook: String(saved.facebook),
       amazon: String(saved.amazon),
       walmart: String(saved.walmart),
+      walmartFivesim: String(saved.walmartFivesim),
       others: String(saved.others),
     });
     toast.success("OTP service prices updated.");
@@ -270,6 +278,17 @@ export default function AdminSettingsPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="price-walmart-fivesim">Walmart 5SIM (Rs)</Label>
+                <Input
+                  id="price-walmart-fivesim"
+                  inputMode="numeric"
+                  value={tariffInputs.walmartFivesim}
+                  onChange={(ev) => updateTariffInput("walmartFivesim", ev.target.value)}
+                  disabled={loadingTariffs || savingTariffs}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="price-others">Others/Default (Rs)</Label>
                 <Input
                   id="price-others"
@@ -283,7 +302,7 @@ export default function AdminSettingsPage() {
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
-                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, Walmart Rs {tariffs.walmart}, Others Rs {tariffs.others}
+                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, Walmart Rs {tariffs.walmart}, Walmart 5SIM Rs {tariffs.walmartFivesim}, Others Rs {tariffs.others}
               </p>
               <Button type="submit" disabled={loadingTariffs || savingTariffs}>
                 {savingTariffs ? (
