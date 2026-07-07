@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
+import { useApi } from "@/hooks/use-api";
 import { useAuthStore } from "@/stores/auth-store";
 
 type Step = "idle" | "otp-sent" | "done";
