@@ -28,7 +28,7 @@ type UsageSummary = {
 const PLATFORM_STYLES: Record<string, string> = {
   Facebook: "border-blue-500/30 bg-blue-500/10 text-blue-300",
   Amazon: "border-orange-500/30 bg-orange-500/10 text-orange-300",
-  Walmart: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+  WhatsApp: "border-amber-500/30 bg-amber-500/10 text-amber-300",
   Others: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
 };
 

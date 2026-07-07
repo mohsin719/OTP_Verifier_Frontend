@@ -4,17 +4,17 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 
-export default function WalmartPlatformPage(): React.ReactElement {
+export default function WhatsAppPlatformPage(): React.ReactElement {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const userPlatform = user?.preferredPlatform || "Facebook";
 
   useEffect(() => {
-    if (userPlatform === "WhatsApp") {
-      router.replace("/numbers?platform=whatsapp");
+    if (userPlatform !== "WhatsApp") {
+      router.replace("/platforms");
       return;
     }
-    router.replace("/platforms");
+    router.replace("/numbers?platform=whatsapp");
   }, [router, userPlatform]);
 
   return (

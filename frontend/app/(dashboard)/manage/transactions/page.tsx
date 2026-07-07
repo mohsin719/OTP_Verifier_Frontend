@@ -82,7 +82,7 @@ const TX_TYPE_VISUAL: Record<
 const PLATFORM_CHIP: Record<string, string> = {
   Facebook: "bg-blue-500/15 text-blue-300 border-blue-500/25",
   Amazon: "bg-orange-500/15 text-orange-300 border-orange-500/25",
-  Walmart: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+  WhatsApp: "bg-amber-500/15 text-amber-300 border-amber-500/25",
   Others: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
 };
 

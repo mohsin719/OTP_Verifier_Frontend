@@ -21,16 +21,25 @@ type Step = "idle" | "otp-sent" | "done";
 type ServiceTariffs = {
   facebook: number;
   amazon: number;
-  walmart: number;
-  walmartFivesim: number;
+  whatsapp: number;
+  whatsappFivesim: number;
+  whatsappTelnyx: number;
   others: number;
+};
+
+type WhatsAppProviderBalances = {
+  smsBower: number | null;
+  fiveSim: number | null;
+  telnyx: number | null;
+  updatedAt: string;
 };
 
 const TARIFF_DEFAULTS: ServiceTariffs = {
   facebook: 30,
   amazon: 60,
-  walmart: 60,
-  walmartFivesim: 75,
+  whatsapp: 60,
+  whatsappFivesim: 75,
+  whatsappTelnyx: 60,
   others: 60,
 };
 
@@ -46,12 +55,18 @@ export default function AdminSettingsPage() {
   const [tariffInputs, setTariffInputs] = useState<Record<keyof ServiceTariffs, string>>({
     facebook: "30",
     amazon: "60",
-    walmart: "60",
-    walmartFivesim: "75",
+    whatsapp: "60",
+    whatsappFivesim: "75",
+    whatsappTelnyx: "60",
     others: "60",
   });
   const [loadingTariffs, setLoadingTariffs] = useState(false);
   const [savingTariffs, setSavingTariffs] = useState(false);
+  const { data: providerBalances, mutate: refreshProviderBalances } =
+    useApi<WhatsAppProviderBalances>("/api/manage/whatsapp-provider-balances", {
+      cacheTtlMs: 30_000,
+      disableDedupe: true,
+    });
 
   useEffect(() => {
     if (!token) return;
@@ -72,16 +87,18 @@ export default function AdminSettingsPage() {
         const nextTariffs: ServiceTariffs = {
           facebook: Number(res.data.facebook),
           amazon: Number(res.data.amazon),
-          walmart: Number(res.data.walmart),
-          walmartFivesim: Number(res.data.walmartFivesim),
+          whatsapp: Number(res.data.whatsapp),
+          whatsappFivesim: Number(res.data.whatsappFivesim),
+          whatsappTelnyx: Number(res.data.whatsappTelnyx),
           others: Number(res.data.others),
         };
         setTariffs(nextTariffs);
         setTariffInputs({
           facebook: String(nextTariffs.facebook),
           amazon: String(nextTariffs.amazon),
-          walmart: String(nextTariffs.walmart),
-          walmartFivesim: String(nextTariffs.walmartFivesim),
+          whatsapp: String(nextTariffs.whatsapp),
+          whatsappFivesim: String(nextTariffs.whatsappFivesim),
+          whatsappTelnyx: String(nextTariffs.whatsappTelnyx),
           others: String(nextTariffs.others),
         });
       })
@@ -109,8 +126,9 @@ export default function AdminSettingsPage() {
     const payload: ServiceTariffs = {
       facebook: Number(tariffInputs.facebook),
       amazon: Number(tariffInputs.amazon),
-      walmart: Number(tariffInputs.walmart),
-      walmartFivesim: Number(tariffInputs.walmartFivesim),
+      whatsapp: Number(tariffInputs.whatsapp),
+      whatsappFivesim: Number(tariffInputs.whatsappFivesim),
+      whatsappTelnyx: Number(tariffInputs.whatsappTelnyx),
       others: Number(tariffInputs.others),
     };
 
@@ -136,16 +154,18 @@ export default function AdminSettingsPage() {
     const saved = {
       facebook: Number(res.data.facebook),
       amazon: Number(res.data.amazon),
-      walmart: Number(res.data.walmart),
-      walmartFivesim: Number(res.data.walmartFivesim),
+      whatsapp: Number(res.data.whatsapp),
+      whatsappFivesim: Number(res.data.whatsappFivesim),
+      whatsappTelnyx: Number(res.data.whatsappTelnyx),
       others: Number(res.data.others),
     };
     setTariffs(saved);
     setTariffInputs({
       facebook: String(saved.facebook),
       amazon: String(saved.amazon),
-      walmart: String(saved.walmart),
-      walmartFivesim: String(saved.walmartFivesim),
+      whatsapp: String(saved.whatsapp),
+      whatsappFivesim: String(saved.whatsappFivesim),
+      whatsappTelnyx: String(saved.whatsappTelnyx),
       others: String(saved.others),
     });
     toast.success("OTP service prices updated.");
@@ -267,23 +287,34 @@ export default function AdminSettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price-walmart">Walmart (Rs)</Label>
+                <Label htmlFor="price-whatsapp">WhatsApp (Rs)</Label>
                 <Input
-                  id="price-walmart"
+                  id="price-whatsapp"
                   inputMode="numeric"
-                  value={tariffInputs.walmart}
-                  onChange={(ev) => updateTariffInput("walmart", ev.target.value)}
+                  value={tariffInputs.whatsapp}
+                  onChange={(ev) => updateTariffInput("whatsapp", ev.target.value)}
                   disabled={loadingTariffs || savingTariffs}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price-walmart-fivesim">Walmart 5SIM (Rs)</Label>
+                <Label htmlFor="price-whatsapp-fivesim">WhatsApp 5SIM (Rs)</Label>
                 <Input
-                  id="price-walmart-fivesim"
+                  id="price-whatsapp-fivesim"
                   inputMode="numeric"
-                  value={tariffInputs.walmartFivesim}
-                  onChange={(ev) => updateTariffInput("walmartFivesim", ev.target.value)}
+                  value={tariffInputs.whatsappFivesim}
+                  onChange={(ev) => updateTariffInput("whatsappFivesim", ev.target.value)}
+                  disabled={loadingTariffs || savingTariffs}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="price-whatsapp-telnyx">WhatsApp Telnyx (Rs)</Label>
+                <Input
+                  id="price-whatsapp-telnyx"
+                  inputMode="numeric"
+                  value={tariffInputs.whatsappTelnyx}
+                  onChange={(ev) => updateTariffInput("whatsappTelnyx", ev.target.value)}
                   disabled={loadingTariffs || savingTariffs}
                   required
                 />
@@ -302,7 +333,7 @@ export default function AdminSettingsPage() {
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
-                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, Walmart Rs {tariffs.walmart}, Walmart 5SIM Rs {tariffs.walmartFivesim}, Others Rs {tariffs.others}
+                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, WhatsApp Rs {tariffs.whatsapp}, WhatsApp 5SIM Rs {tariffs.whatsappFivesim}, WhatsApp Telnyx Rs {tariffs.whatsappTelnyx}, Others Rs {tariffs.others}
               </p>
               <Button type="submit" disabled={loadingTariffs || savingTariffs}>
                 {savingTariffs ? (
@@ -316,6 +347,53 @@ export default function AdminSettingsPage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>WhatsApp provider balances</CardTitle>
+          <CardDescription>
+            Live balance visibility for SMS Bower, 5SIM, and Telnyx fallback routing.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">SMS Bower</p>
+              <p className="mt-1 text-lg font-semibold">
+                {providerBalances?.smsBower == null ? "N/A" : providerBalances.smsBower}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">5SIM</p>
+              <p className="mt-1 text-lg font-semibold">
+                {providerBalances?.fiveSim == null ? "N/A" : providerBalances.fiveSim}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Telnyx</p>
+              <p className="mt-1 text-lg font-semibold">
+                {providerBalances?.telnyx == null ? "N/A" : providerBalances.telnyx}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Updated:{" "}
+              {providerBalances?.updatedAt
+                ? new Date(providerBalances.updatedAt).toLocaleString()
+                : "—"}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void refreshProviderBalances(undefined, { revalidate: true })}
+            >
+              Refresh balances
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

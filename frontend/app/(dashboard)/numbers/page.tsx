@@ -66,54 +66,66 @@ const BACKGROUND_SYNC_INTERVAL_MS = 10_000;
 const LEASE_EXPIRED_TOAST_ID = "lease-expired-toast";
 const SWAP_ISSUE_OPTIONS: SwapIssueOption[] = [
   {
-    id: "already-used",
-    label: "Platform says number is already used",
-    reason: "already in use on platform",
-    suggestion: "This option enables protected replacement logic. If OTP was not received, no extra charge is applied.",
-    postAssignSuggestion: "Use the new number immediately. If platform still shows already-used, switch once more and avoid reusing this number.",
-  },
-  {
-    id: "unfortunately-error",
-    label: "Platform shows 'Unfortunately, we can't create your account'",
-    reason: "account blocked / unfortunate error",
-    suggestion: "Use a clean browser profile + stable US residential VPN + fresh account details before retrying.",
-    postAssignSuggestion: "Switch to Incognito (no extensions), use stable US VPN, clear Walmart cookies, then retry once.",
-  },
-  {
-    id: "walmart-csp-block",
-    label: "Walmart shows CSP / script blocked / security error",
-    reason: "walmart browser security csp blocked",
-    suggestion: "This is usually browser environment blocking, not number failure. Use clean browser context first.",
+    id: "otp-not-received",
+    label: "OTP not received",
+    reason: "whatsapp otp not received",
+    suggestion:
+      "Wait 30-60 seconds and trigger resend from WhatsApp once before switching.",
     postAssignSuggestion:
-      "Close extensions, use Incognito/new Chrome profile, keep only 1 tab, and retry on Walmart with stable US VPN.",
+      "Use this number immediately, request OTP once, and avoid multiple resend taps.",
   },
   {
-    id: "no-otp",
-    label: "No OTP received",
-    reason: "no otp received",
-    suggestion: "Trigger 'Resend OTP' on the platform first. If still no SMS, switch number.",
-    postAssignSuggestion: "Trigger resend once on the platform. If no OTP within 30-60 seconds, switch number again.",
+    id: "invalid-mobile-number",
+    label: "WhatsApp says number is not a valid US mobile number",
+    reason: "whatsapp invalid mobile number us",
+    suggestion:
+      "This number type is being rejected by WhatsApp. Switch to a new number immediately.",
+    postAssignSuggestion:
+      "Try number in full +1 format without spaces. If rejected again, switch once more.",
   },
   {
-    id: "invalid-otp",
-    label: "OTP received but platform rejected it",
-    reason: "otp invalid on platform",
-    suggestion: "Make sure latest OTP is entered. If rejected repeatedly, switch number and try once.",
-    postAssignSuggestion: "Paste only the latest OTP. If platform still rejects it, retry with a fresh number and new resend.",
+    id: "login-not-available",
+    label: "WhatsApp says: Login not available right now",
+    reason: "whatsapp login not available right now",
+    suggestion:
+      "This is usually trust/risk lock. Use a clean device profile, stable network, and wait before retry.",
+    postAssignSuggestion:
+      "Change IP/device fingerprint, wait a few minutes, then retry with fresh number.",
   },
   {
-    id: "slow-delivery",
-    label: "OTP delivery is too slow / expired",
-    reason: "slow otp delivery",
-    suggestion: "Switch early when countdown is low to avoid expiry and refund-delay cycles.",
-    postAssignSuggestion: "Use the new number immediately and request OTP quickly to avoid timer expiry.",
+    id: "security-temporary-block",
+    label: "WhatsApp security/temporary block shown",
+    reason: "whatsapp security temporary block",
+    suggestion:
+      "Do not retry aggressively. Multiple fast retries increase risk flags.",
+    postAssignSuggestion:
+      "Wait cooldown period, use new network/session, then retry once with new number.",
+  },
+  {
+    id: "otp-invalid",
+    label: "OTP received but WhatsApp rejected it",
+    reason: "whatsapp otp invalid",
+    suggestion:
+      "Use only the latest OTP. Old code or delayed SMS can fail verification.",
+    postAssignSuggestion:
+      "Request fresh OTP once and submit immediately. If still rejected, switch number.",
+  },
+  {
+    id: "slow-expired",
+    label: "OTP delivery too slow / expired",
+    reason: "whatsapp otp slow expired",
+    suggestion:
+      "Switch early when countdown is low to avoid expiry and refund-delay cycles.",
+    postAssignSuggestion:
+      "Use the new number immediately and request OTP quickly to avoid timer expiry.",
   },
   {
     id: "other",
-    label: "Other issue",
-    reason: "number not working / other issue",
+    label: "Other WhatsApp issue",
+    reason: "whatsapp number not working other issue",
     suggestion: "Report submitted. A new number will be assigned now.",
-    postAssignSuggestion: "Try once with the new number. If issue repeats, report exact platform message in next swap.",
+    postAssignSuggestion:
+      "Try once with the new number. If issue repeats, report exact WhatsApp message in next swap.",
   },
 ];
 
@@ -164,14 +176,15 @@ function NumbersPageContent() {
   } = useApi<{
     facebook: number;
     amazon: number;
-    walmart: number;
-    walmartFivesim: number;
-    walmartNextPrice?: number;
-    walmartAttemptCount?: number;
-    walmartNextProvider?: "SMSBOWER" | "FIVESIM";
+    whatsapp: number;
+    whatsappFivesim: number;
+    whatsappTelnyx: number;
+    whatsappNextPrice?: number;
+    whatsappAttemptCount?: number;
+    whatsappNextProvider?: "SMSBOWER" | "FIVESIM" | "TELNYX";
     others: number;
   }>("/api/numbers/tariffs", {
-    // Per-user Walmart next price changes after each no-OTP event, so always fetch fresh.
+    // Per-user WhatsApp next price changes after each no-OTP event, so always fetch fresh.
     cacheTtlMs: 0,
     disableDedupe: true,
     revalidateOnMount: true,
@@ -280,9 +293,7 @@ function NumbersPageContent() {
     () => normalizePlatformTariffs(tariffPayload),
     [tariffPayload],
   );
-  const walmartFivesimPrice = Number(tariffPayload?.walmartFivesim ?? 75);
-  const walmartAttemptCount = Number(tariffPayload?.walmartAttemptCount ?? 0);
-  const walmartNextAttemptInCycle = (walmartAttemptCount % 3) + 1;
+  const whatsappFivesimPrice = Number(tariffPayload?.whatsappFivesim ?? 75);
   const activePlatformVisual = getPlatformVisual(activePlatform);
   const activeSessionPrice = getPlatformPricePkr(activePlatform, platformTariffs);
   const cancelRefundAmount =
@@ -308,8 +319,8 @@ function NumbersPageContent() {
   const serviceType = normalizeServiceType(selectedPlatform);
   const baseServicePrice = getPlatformPricePkr(selectedPlatform, platformTariffs);
   const servicePrice =
-    selectedPlatform === "Walmart"
-      ? Number(tariffPayload?.walmartNextPrice ?? baseServicePrice)
+    selectedPlatform === "WhatsApp"
+      ? Number(tariffPayload?.whatsappNextPrice ?? baseServicePrice)
       : baseServicePrice;
   const pricingUnavailable = Boolean(token) && Boolean(tariffError);
 
@@ -1451,16 +1462,6 @@ function NumbersPageContent() {
             !isWaitingForOtp &&
             (!displayActiveSession || sessionComplete || platformMismatch)) && (
             <div className="space-y-2">
-              {displayPlatform === "Walmart" ? (
-                <p className="text-xs text-muted-foreground text-center">
-                  Current Walmart attempts:{" "}
-                  <strong className="text-foreground">{walmartAttemptCount}</strong> ·
-                  Next attempt:{" "}
-                  <strong className="text-foreground">
-                    {walmartNextAttemptInCycle}/3
-                  </strong>
-                </p>
-              ) : null}
               <Button
                 onClick={() => void acquire()}
                 disabled={
@@ -1522,9 +1523,9 @@ function NumbersPageContent() {
             <li>Click <strong className="text-foreground">Copy</strong> and paste the code on {displayPlatformVisual.displayName}</li>
             <li>Number lease lasts {LEASE_TTL_MINUTES} minutes — OTP must arrive within this window</li>
             <li>If no OTP arrives in time, your Rs {servicePrice} is automatically refunded</li>
-            {displayPlatform === "Walmart" ? (
+            {displayPlatform === "WhatsApp" ? (
               <>
-                <li>If OTP is not received, attempts 1-2 use SMS Bower, attempt 3 uses 5SIM (Rs {walmartFivesimPrice}), then the cycle resets to SMS Bower.</li>
+                <li>If OTP is not received, attempts rotate SMS Bower -&gt; 5SIM -&gt; Telnyx, then repeat. Providers with low balance or temporary outage are skipped automatically. Current 5SIM rate: Rs {whatsappFivesimPrice}.</li>
               </>
             ) : null}
             <li>Use <strong className="text-foreground">Cancel</strong> anytime before OTP to get an instant refund</li>

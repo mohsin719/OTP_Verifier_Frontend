@@ -13,14 +13,14 @@ import { cn } from "@/lib/utils";
 const platformIcons = {
   Facebook: Tag,
   Amazon: ShoppingBag,
-  Walmart: ShoppingBag,
+  WhatsApp: ShoppingBag,
   Others: Globe,
 } as const;
 
 const platformStyles = {
   Facebook: { color: "text-blue-500", bgColor: "bg-blue-500/10", border: "border-blue-500/40" },
   Amazon: { color: "text-orange-500", bgColor: "bg-orange-500/10", border: "border-orange-500/40" },
-  Walmart: { color: "text-amber-500", bgColor: "bg-amber-500/10", border: "border-amber-500/40" },
+  WhatsApp: { color: "text-amber-500", bgColor: "bg-amber-500/10", border: "border-amber-500/40" },
   Others: { color: "text-emerald-500", bgColor: "bg-emerald-500/10", border: "border-emerald-500/40" },
 } as const;
 

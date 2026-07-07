@@ -70,14 +70,14 @@ const PLATFORM_FILTERS = [
   { value: "ALL", label: "All platforms" },
   { value: "facebook", label: "Facebook" },
   { value: "amazon", label: "Amazon" },
-  { value: "walmart", label: "Walmart" },
+  { value: "whatsapp", label: "WhatsApp" },
   { value: "others", label: "Others" },
 ] as const;
 
 const PLATFORM_CHIP: Record<string, string> = {
   Facebook: "bg-blue-500/15 text-blue-300 border-blue-500/30",
   Amazon: "bg-orange-500/15 text-orange-300 border-orange-500/30",
-  Walmart: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  WhatsApp: "bg-amber-500/15 text-amber-300 border-amber-500/30",
   Others: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
 };
 

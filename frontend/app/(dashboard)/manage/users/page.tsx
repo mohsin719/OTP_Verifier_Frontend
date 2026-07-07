@@ -29,7 +29,7 @@ type UserRow = {
   isBanned: boolean;
   preferredPlatform: string;
   balancePkr: number;
-  walmartAttemptCount: number;
+  whatsappAttemptCount: number;
   createdAt: string;
 };
 
@@ -471,7 +471,7 @@ export default function AdminUsersPage(): React.ReactElement {
                       <th className="pb-2 pr-4">Username</th>
                       <th className="pb-2 pr-4">Email</th>
                       <th className="pb-2 pr-4">Platform</th>
-                      <th className="pb-2 pr-4">Walmart Attempts</th>
+                      <th className="pb-2 pr-4">WhatsApp Attempts</th>
                       <th className="pb-2 pr-4">Balance</th>
                       <th className="pb-2 pr-4">Status</th>
                       <th className="pb-2">Actions</th>
@@ -486,7 +486,7 @@ export default function AdminUsersPage(): React.ReactElement {
                         <td className="py-2 pr-4 font-medium">{u.username}</td>
                         <td className="py-2 pr-4 text-muted-foreground">{u.email}</td>
                         <td className="py-2 pr-4">{u.preferredPlatform || "—"}</td>
-                        <td className="py-2 pr-4 tabular-nums">{u.walmartAttemptCount ?? 0}</td>
+                        <td className="py-2 pr-4 tabular-nums">{u.whatsappAttemptCount ?? 0}</td>
                         <td className="py-2 pr-4 font-medium tabular-nums whitespace-nowrap">
                           {formatBalancePkr(u.balancePkr ?? 0)}
                         </td>

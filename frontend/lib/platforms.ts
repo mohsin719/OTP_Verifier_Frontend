@@ -3,7 +3,7 @@ import { Globe, ShoppingBag, Tag, type LucideIcon } from "lucide-react";
 export const PLATFORM_OPTIONS = [
   "Facebook",
   "Amazon",
-  "Walmart",
+  "WhatsApp",
   "Others",
 ] as const;
 
@@ -23,7 +23,7 @@ export type PlatformTariffs = Record<PlatformOption, number>;
 export const PLATFORM_COOLDOWN_HOURS: Record<PlatformOption, number> = {
   Facebook: 36,
   Amazon: 48,
-  Walmart: 48,
+  WhatsApp: 48,
   Others: 24,
 };
 
@@ -51,11 +51,11 @@ export const PLATFORM_CARDS: PlatformCard[] = [
     href: "/platforms/amazon",
   },
   {
-    name: "Walmart",
-    value: "Walmart",
-    description: "Get a number for Walmart account verification",
-    cooldownHours: PLATFORM_COOLDOWN_HOURS.Walmart,
-    href: "/platforms/walmart",
+    name: "WhatsApp",
+    value: "WhatsApp",
+    description: "Get a number for WhatsApp account verification",
+    cooldownHours: PLATFORM_COOLDOWN_HOURS.WhatsApp,
+    href: "/platforms/whatsapp",
   },
   {
     name: "Global US Numbers",
@@ -91,7 +91,7 @@ export const PLATFORM_VISUALS: Record<
     bgColor: "bg-orange-500/15",
     border: "border-orange-500/35",
   },
-  Walmart: {
+  WhatsApp: {
     Icon: ShoppingBag,
     color: "text-amber-400",
     bgColor: "bg-amber-500/15",
@@ -109,7 +109,8 @@ export function serviceTypeToPlatform(raw: string | null | undefined): PlatformO
   const value = raw?.trim().toLowerCase() ?? "";
   if (value === "facebook") return "Facebook";
   if (value === "amazon") return "Amazon";
-  if (value === "walmart") return "Walmart";
+  if (value === "whatsapp") return "WhatsApp";
+  if (value === "walmart") return "WhatsApp";
   if (value === "others" || value === "other" || value === "generic") return "Others";
   return "Others";
 }
@@ -145,7 +146,7 @@ export function getPlatformVisual(platform: PlatformOption): PlatformVisual {
 export const DEFAULT_PLATFORM_TARIFFS: PlatformTariffs = {
   Facebook: 30,
   Amazon: 60,
-  Walmart: 60,
+  WhatsApp: 60,
   Others: 60,
 };
 
@@ -153,14 +154,14 @@ export function normalizePlatformTariffs(
   raw?: Partial<{
     facebook: number;
     amazon: number;
-    walmart: number;
+    whatsapp: number;
     others: number;
   }> | null,
 ): PlatformTariffs {
   return {
     Facebook: Number(raw?.facebook ?? DEFAULT_PLATFORM_TARIFFS.Facebook),
     Amazon: Number(raw?.amazon ?? DEFAULT_PLATFORM_TARIFFS.Amazon),
-    Walmart: Number(raw?.walmart ?? DEFAULT_PLATFORM_TARIFFS.Walmart),
+    WhatsApp: Number(raw?.whatsapp ?? DEFAULT_PLATFORM_TARIFFS.WhatsApp),
     Others: Number(raw?.others ?? DEFAULT_PLATFORM_TARIFFS.Others),
   };
 }

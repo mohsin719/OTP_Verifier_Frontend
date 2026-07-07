@@ -21,7 +21,7 @@ type FailureLogRow = {
   timestamp: string;
 };
 
-const PLATFORM_FILTERS = ["ALL", "Facebook", "Amazon", "Walmart", "Others"] as const;
+const PLATFORM_FILTERS = ["ALL", "Facebook", "Amazon", "WhatsApp", "Others"] as const;
 
 export default function AdminFailureLogsPage(): React.ReactElement {
   const token = useAuthStore((s) => s.token);
