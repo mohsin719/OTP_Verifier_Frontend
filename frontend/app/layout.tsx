@@ -81,13 +81,38 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>): React.ReactElement {
+  const isMaintenanceLocked =
+    process.env.NEXT_PUBLIC_MAINTENANCE_LOCK === "true";
+  const isMaintenanceMode =
+    isMaintenanceLocked ||
+    process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true" ||
+    process.env.MAINTENANCE_MODE === "true";
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${outfit.variable} min-h-screen antialiased`}
       >
-        <Providers>{children}</Providers>
+        <Providers>
+          {isMaintenanceMode ? <MaintenanceScreen /> : children}
+        </Providers>
       </body>
     </html>
+  );
+}
+
+function MaintenanceScreen(): React.ReactElement {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-background px-4">
+      <section className="w-full max-w-lg rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+        <p className="text-sm font-medium text-primary">Temporary Notice</p>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight text-foreground">
+          Site is under maintenance
+        </h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          We are performing scheduled updates. Please check back soon.
+        </p>
+      </section>
+    </main>
   );
 }
