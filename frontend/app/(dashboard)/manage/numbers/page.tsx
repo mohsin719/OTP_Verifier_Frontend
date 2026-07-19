@@ -76,7 +76,7 @@ export default function AdminNumbersPage(): React.ReactElement {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const syncFromTelnyx = async () => {
+  const syncFromInventorySource = async () => {
     if (!token) return;
     setSyncing(true);
     const res = await apiFetch<SyncResult>("/api/manage/numbers/sync", {
@@ -139,7 +139,7 @@ export default function AdminNumbersPage(): React.ReactElement {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Numbers</h1>
           <p className="text-muted-foreground">
-            Phone numbers are synced automatically from your Telnyx account every 10 minutes.
+            Phone numbers are synced automatically from your inventory source every 10 minutes.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -147,9 +147,9 @@ export default function AdminNumbersPage(): React.ReactElement {
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
             {isRefreshing ? "Refreshing..." : "Refresh"}
           </Button>
-          <Button onClick={syncFromTelnyx} disabled={syncing} className="gap-2">
+          <Button onClick={syncFromInventorySource} disabled={syncing} className="gap-2">
             <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Syncing…" : "Sync from Telnyx"}
+            {syncing ? "Syncing…" : "Sync Inventory"}
           </Button>
         </div>
       </div>

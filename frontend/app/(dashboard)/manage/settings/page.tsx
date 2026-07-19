@@ -299,7 +299,7 @@ export default function AdminSettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price-whatsapp-fivesim">WhatsApp 5SIM (Rs)</Label>
+                <Label htmlFor="price-whatsapp-fivesim">WhatsApp Route B (Rs)</Label>
                 <Input
                   id="price-whatsapp-fivesim"
                   inputMode="numeric"
@@ -310,7 +310,7 @@ export default function AdminSettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price-whatsapp-telnyx">WhatsApp Telnyx (Rs)</Label>
+                <Label htmlFor="price-whatsapp-telnyx">WhatsApp Route C (Rs)</Label>
                 <Input
                   id="price-whatsapp-telnyx"
                   inputMode="numeric"
@@ -334,7 +334,7 @@ export default function AdminSettingsPage() {
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
-                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, WhatsApp Rs {tariffs.whatsapp}, WhatsApp 5SIM Rs {tariffs.whatsappFivesim}, WhatsApp Telnyx Rs {tariffs.whatsappTelnyx}, Others Rs {tariffs.others}
+                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, WhatsApp Rs {tariffs.whatsapp}, WhatsApp Route B Rs {tariffs.whatsappFivesim}, WhatsApp Route C Rs {tariffs.whatsappTelnyx}, Others Rs {tariffs.others}
               </p>
               <Button type="submit" disabled={loadingTariffs || savingTariffs}>
                 {savingTariffs ? (
@@ -353,27 +353,27 @@ export default function AdminSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>WhatsApp provider balances</CardTitle>
+          <CardTitle>WhatsApp route balances</CardTitle>
           <CardDescription>
-            Live balance visibility for SMS Bower, 5SIM, and Telnyx fallback routing.
+            Live balance visibility for WhatsApp routing channels.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">SMS Bower</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Route A</p>
               <p className="mt-1 text-lg font-semibold">
                 {providerBalances?.smsBower == null ? "N/A" : providerBalances.smsBower}
               </p>
             </div>
             <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">5SIM</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Route B</p>
               <p className="mt-1 text-lg font-semibold">
                 {providerBalances?.fiveSim == null ? "N/A" : providerBalances.fiveSim}
               </p>
             </div>
             <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Telnyx</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Route C</p>
               <p className="mt-1 text-lg font-semibold">
                 {providerBalances?.telnyx == null ? "N/A" : providerBalances.telnyx}
               </p>

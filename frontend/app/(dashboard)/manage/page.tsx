@@ -180,7 +180,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/manage/numbers'}>
                 <div className="font-medium text-foreground">Virtual Inventory</div>
-                <div className="text-xs text-muted-foreground mt-1">Add or remove leased lines, monitor provider connectivity and status.</div>
+                <div className="text-xs text-muted-foreground mt-1">Add or remove leased lines, and monitor routing connectivity and status.</div>
               </div>
               <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/manage/transactions'}>
                 <div className="font-medium text-foreground">Financial Ledger</div>

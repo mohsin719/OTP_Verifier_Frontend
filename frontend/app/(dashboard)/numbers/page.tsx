@@ -293,7 +293,6 @@ function NumbersPageContent() {
     () => normalizePlatformTariffs(tariffPayload),
     [tariffPayload],
   );
-  const whatsappFivesimPrice = Number(tariffPayload?.whatsappFivesim ?? 75);
   const activePlatformVisual = getPlatformVisual(activePlatform);
   const activeSessionPrice = getPlatformPricePkr(activePlatform, platformTariffs);
   const cancelRefundAmount =
@@ -1524,9 +1523,10 @@ function NumbersPageContent() {
             <li>Number lease lasts {LEASE_TTL_MINUTES} minutes — OTP must arrive within this window</li>
             <li>If no OTP arrives in time, your Rs {servicePrice} is automatically refunded</li>
             {displayPlatform === "WhatsApp" ? (
-              <>
-                <li>If OTP is not received, attempts rotate SMS Bower -&gt; 5SIM -&gt; Telnyx, then repeat. Providers with low balance or temporary outage are skipped automatically. Current 5SIM rate: Rs {whatsappFivesimPrice}.</li>
-              </>
+              <li>
+                If OTP is not received, routing rotates automatically across available
+                channels. Low-balance or temporarily unavailable channels are skipped.
+              </li>
             ) : null}
             <li>Use <strong className="text-foreground">Cancel</strong> anytime before OTP to get an instant refund</li>
             <li>Use <strong className="text-foreground">Change Number</strong> to swap to a new number (same price, timer resets)</li>
