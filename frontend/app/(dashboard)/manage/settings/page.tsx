@@ -128,8 +128,9 @@ export default function AdminSettingsPage() {
       facebook: Number(tariffInputs.facebook),
       amazon: Number(tariffInputs.amazon),
       whatsapp: Number(tariffInputs.whatsapp),
-      whatsappFivesim: Number(tariffInputs.whatsappFivesim),
-      whatsappTelnyx: Number(tariffInputs.whatsappTelnyx),
+      // Keep provider-specific fields aligned with the main WhatsApp tariff.
+      whatsappFivesim: Number(tariffInputs.whatsapp),
+      whatsappTelnyx: Number(tariffInputs.whatsapp),
       others: Number(tariffInputs.others),
     };
 
@@ -299,28 +300,6 @@ export default function AdminSettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price-whatsapp-fivesim">WhatsApp Route B (Rs)</Label>
-                <Input
-                  id="price-whatsapp-fivesim"
-                  inputMode="numeric"
-                  value={tariffInputs.whatsappFivesim}
-                  onChange={(ev) => updateTariffInput("whatsappFivesim", ev.target.value)}
-                  disabled={loadingTariffs || savingTariffs}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="price-whatsapp-telnyx">WhatsApp Route C (Rs)</Label>
-                <Input
-                  id="price-whatsapp-telnyx"
-                  inputMode="numeric"
-                  value={tariffInputs.whatsappTelnyx}
-                  onChange={(ev) => updateTariffInput("whatsappTelnyx", ev.target.value)}
-                  disabled={loadingTariffs || savingTariffs}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="price-others">Others/Default (Rs)</Label>
                 <Input
                   id="price-others"
@@ -334,7 +313,7 @@ export default function AdminSettingsPage() {
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
-                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, WhatsApp Rs {tariffs.whatsapp}, WhatsApp Route B Rs {tariffs.whatsappFivesim}, WhatsApp Route C Rs {tariffs.whatsappTelnyx}, Others Rs {tariffs.others}
+                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, WhatsApp Rs {tariffs.whatsapp}, Others Rs {tariffs.others}
               </p>
               <Button type="submit" disabled={loadingTariffs || savingTariffs}>
                 {savingTariffs ? (
