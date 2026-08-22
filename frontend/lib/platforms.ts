@@ -2,8 +2,7 @@ import { Globe, ShoppingBag, Tag, type LucideIcon } from "lucide-react";
 
 export const PLATFORM_OPTIONS = [
   "Facebook",
-  "Amazon",
-  "WhatsApp",
+  "Walmart",
   "Others",
 ] as const;
 
@@ -22,8 +21,7 @@ export type PlatformTariffs = Record<PlatformOption, number>;
 /** Matches backend `platform_rules.base_cooldown_hours` defaults after successful OTP use. */
 export const PLATFORM_COOLDOWN_HOURS: Record<PlatformOption, number> = {
   Facebook: 36,
-  Amazon: 48,
-  WhatsApp: 48,
+  Walmart: 48,
   Others: 24,
 };
 
@@ -44,18 +42,11 @@ export const PLATFORM_CARDS: PlatformCard[] = [
     href: "/platforms/facebook",
   },
   {
-    name: "Amazon",
-    value: "Amazon",
-    description: "Get a number for Amazon account verification",
-    cooldownHours: PLATFORM_COOLDOWN_HOURS.Amazon,
-    href: "/platforms/amazon",
-  },
-  {
-    name: "WhatsApp",
-    value: "WhatsApp",
-    description: "Get a number for WhatsApp account verification",
-    cooldownHours: PLATFORM_COOLDOWN_HOURS.WhatsApp,
-    href: "/platforms/whatsapp",
+    name: "Walmart",
+    value: "Walmart",
+    description: "Get a number for Walmart account verification",
+    cooldownHours: PLATFORM_COOLDOWN_HOURS.Walmart,
+    href: "/platforms/walmart",
   },
   {
     name: "Global US Numbers",
@@ -85,17 +76,11 @@ export const PLATFORM_VISUALS: Record<
     bgColor: "bg-blue-500/15",
     border: "border-blue-500/35",
   },
-  Amazon: {
+  Walmart: {
     Icon: ShoppingBag,
     color: "text-orange-400",
     bgColor: "bg-orange-500/15",
     border: "border-orange-500/35",
-  },
-  WhatsApp: {
-    Icon: ShoppingBag,
-    color: "text-amber-400",
-    bgColor: "bg-amber-500/15",
-    border: "border-amber-500/35",
   },
   Others: {
     Icon: Globe,
@@ -108,9 +93,7 @@ export const PLATFORM_VISUALS: Record<
 export function serviceTypeToPlatform(raw: string | null | undefined): PlatformOption {
   const value = raw?.trim().toLowerCase() ?? "";
   if (value === "facebook") return "Facebook";
-  if (value === "amazon") return "Amazon";
-  if (value === "whatsapp") return "WhatsApp";
-  if (value === "walmart") return "WhatsApp";
+  if (value === "walmart") return "Walmart";
   if (value === "others" || value === "other" || value === "generic") return "Others";
   return "Others";
 }
@@ -145,23 +128,20 @@ export function getPlatformVisual(platform: PlatformOption): PlatformVisual {
 
 export const DEFAULT_PLATFORM_TARIFFS: PlatformTariffs = {
   Facebook: 30,
-  Amazon: 60,
-  WhatsApp: 60,
+  Walmart: 60,
   Others: 60,
 };
 
 export function normalizePlatformTariffs(
   raw?: Partial<{
     facebook: number;
-    amazon: number;
-    whatsapp: number;
+    walmart: number;
     others: number;
   }> | null,
 ): PlatformTariffs {
   return {
     Facebook: Number(raw?.facebook ?? DEFAULT_PLATFORM_TARIFFS.Facebook),
-    Amazon: Number(raw?.amazon ?? DEFAULT_PLATFORM_TARIFFS.Amazon),
-    WhatsApp: Number(raw?.whatsapp ?? DEFAULT_PLATFORM_TARIFFS.WhatsApp),
+    Walmart: Number(raw?.walmart ?? DEFAULT_PLATFORM_TARIFFS.Walmart),
     Others: Number(raw?.others ?? DEFAULT_PLATFORM_TARIFFS.Others),
   };
 }

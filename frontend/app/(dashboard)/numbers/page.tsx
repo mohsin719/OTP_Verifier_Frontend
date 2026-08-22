@@ -68,64 +68,46 @@ const SWAP_ISSUE_OPTIONS: SwapIssueOption[] = [
   {
     id: "otp-not-received",
     label: "OTP not received",
-    reason: "whatsapp otp not received",
+    reason: "otp not received",
     suggestion:
-      "Wait 30-60 seconds and trigger resend from WhatsApp once before switching.",
+      "Wait 30-60 seconds and trigger resend once before switching.",
     postAssignSuggestion:
       "Use this number immediately, request OTP once, and avoid multiple resend taps.",
   },
   {
-    id: "invalid-mobile-number",
-    label: "WhatsApp says number is not a valid US mobile number",
-    reason: "whatsapp invalid mobile number us",
+    id: "number-already-in-use",
+    label: "Number already registered or in use",
+    reason: "number already in use",
     suggestion:
-      "This number type is being rejected by WhatsApp. Switch to a new number immediately.",
+      "This number is already associated with another account. Switch to a new number.",
     postAssignSuggestion:
-      "Try number in full +1 format without spaces. If rejected again, switch once more.",
+      "Try the new number. It should be fresh and ready for registration.",
   },
   {
-    id: "login-not-available",
-    label: "WhatsApp says: Login not available right now",
-    reason: "whatsapp login not available right now",
+    id: "number-blocked-invalid",
+    label: "Number is blocked or invalid",
+    reason: "number blocked or invalid",
     suggestion:
-      "This is usually trust/risk lock. Use a clean device profile, stable network, and wait before retry.",
+      "The service rejected this number type or it has been flagged. Switch to a new number.",
     postAssignSuggestion:
-      "Change IP/device fingerprint, wait a few minutes, then retry with fresh number.",
-  },
-  {
-    id: "security-temporary-block",
-    label: "WhatsApp security/temporary block shown",
-    reason: "whatsapp security temporary block",
-    suggestion:
-      "Do not retry aggressively. Multiple fast retries increase risk flags.",
-    postAssignSuggestion:
-      "Wait cooldown period, use new network/session, then retry once with new number.",
+      "Use the new number. If the issue persists, try changing your IP or device.",
   },
   {
     id: "otp-invalid",
-    label: "OTP received but WhatsApp rejected it",
-    reason: "whatsapp otp invalid",
+    label: "OTP received but rejected by service",
+    reason: "otp invalid",
     suggestion:
       "Use only the latest OTP. Old code or delayed SMS can fail verification.",
     postAssignSuggestion:
       "Request fresh OTP once and submit immediately. If still rejected, switch number.",
   },
   {
-    id: "slow-expired",
-    label: "OTP delivery too slow / expired",
-    reason: "whatsapp otp slow expired",
-    suggestion:
-      "Switch early when countdown is low to avoid expiry and refund-delay cycles.",
-    postAssignSuggestion:
-      "Use the new number immediately and request OTP quickly to avoid timer expiry.",
-  },
-  {
     id: "other",
-    label: "Other WhatsApp issue",
-    reason: "whatsapp number not working other issue",
+    label: "Other issue",
+    reason: "number not working other issue",
     suggestion: "Report submitted. A new number will be assigned now.",
     postAssignSuggestion:
-      "Try once with the new number. If issue repeats, report exact WhatsApp message in next swap.",
+      "Try once with the new number. If issue repeats, please try again later.",
   },
 ];
 
@@ -175,16 +157,9 @@ function NumbersPageContent() {
     mutate: refreshTariffs,
   } = useApi<{
     facebook: number;
-    amazon: number;
-    whatsapp: number;
-    whatsappFivesim: number;
-    whatsappTelnyx: number;
-    whatsappNextPrice?: number;
-    whatsappAttemptCount?: number;
-    whatsappNextProvider?: "SMSBOWER" | "FIVESIM" | "TELNYX";
+    walmart: number;
     others: number;
   }>("/api/numbers/tariffs", {
-    // Per-user WhatsApp next price changes after each no-OTP event, so always fetch fresh.
     cacheTtlMs: 0,
     disableDedupe: true,
     revalidateOnMount: true,
@@ -317,10 +292,7 @@ function NumbersPageContent() {
   const selectedPlatformVisual = getPlatformVisual(selectedPlatform);
   const serviceType = normalizeServiceType(selectedPlatform);
   const baseServicePrice = getPlatformPricePkr(selectedPlatform, platformTariffs);
-  const servicePrice =
-    selectedPlatform === "WhatsApp"
-      ? Number(tariffPayload?.whatsappNextPrice ?? baseServicePrice)
-      : baseServicePrice;
+  const servicePrice = baseServicePrice;
   const pricingUnavailable = Boolean(token) && Boolean(tariffError);
 
   const platformMismatch =
@@ -1522,12 +1494,7 @@ function NumbersPageContent() {
             <li>Click <strong className="text-foreground">Copy</strong> and paste the code on {displayPlatformVisual.displayName}</li>
             <li>Number lease lasts {LEASE_TTL_MINUTES} minutes — OTP must arrive within this window</li>
             <li>If no OTP arrives in time, your Rs {servicePrice} is automatically refunded</li>
-            {displayPlatform === "WhatsApp" ? (
-              <li>
-                If OTP is not received, routing rotates automatically across available
-                channels. Low-balance or temporarily unavailable channels are skipped.
-              </li>
-            ) : null}
+
             <li>Use <strong className="text-foreground">Cancel</strong> anytime before OTP to get an instant refund</li>
             <li>Use <strong className="text-foreground">Change Number</strong> to swap to a new number (same price, timer resets)</li>
           </ol>

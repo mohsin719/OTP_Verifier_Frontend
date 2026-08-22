@@ -21,26 +21,13 @@ import { useAuthStore } from "@/stores/auth-store";
 type Step = "idle" | "otp-sent" | "done";
 type ServiceTariffs = {
   facebook: number;
-  amazon: number;
-  whatsapp: number;
-  whatsappFivesim: number;
-  whatsappTelnyx: number;
+  walmart: number;
   others: number;
-};
-
-type WhatsAppProviderBalances = {
-  smsBower: number | null;
-  fiveSim: number | null;
-  telnyx: number | null;
-  updatedAt: string;
 };
 
 const TARIFF_DEFAULTS: ServiceTariffs = {
   facebook: 30,
-  amazon: 60,
-  whatsapp: 60,
-  whatsappFivesim: 75,
-  whatsappTelnyx: 60,
+  walmart: 60,
   others: 60,
 };
 
@@ -55,19 +42,11 @@ export default function AdminSettingsPage() {
   const [tariffs, setTariffs] = useState<ServiceTariffs>(TARIFF_DEFAULTS);
   const [tariffInputs, setTariffInputs] = useState<Record<keyof ServiceTariffs, string>>({
     facebook: "30",
-    amazon: "60",
-    whatsapp: "60",
-    whatsappFivesim: "75",
-    whatsappTelnyx: "60",
+    walmart: "60",
     others: "60",
   });
   const [loadingTariffs, setLoadingTariffs] = useState(false);
   const [savingTariffs, setSavingTariffs] = useState(false);
-  const { data: providerBalances, mutate: refreshProviderBalances } =
-    useApi<WhatsAppProviderBalances>("/api/manage/whatsapp-provider-balances", {
-      cacheTtlMs: 30_000,
-      disableDedupe: true,
-    });
 
   useEffect(() => {
     if (!token) return;
@@ -86,20 +65,14 @@ export default function AdminSettingsPage() {
           return;
         }
         const nextTariffs: ServiceTariffs = {
-          facebook: Number(res.data.facebook),
-          amazon: Number(res.data.amazon),
-          whatsapp: Number(res.data.whatsapp),
-          whatsappFivesim: Number(res.data.whatsappFivesim),
-          whatsappTelnyx: Number(res.data.whatsappTelnyx),
-          others: Number(res.data.others),
+          facebook: Number(res.data.facebook ?? 30),
+          walmart: Number((res.data as any).walmart ?? 60), // Graceful fallback
+          others: Number(res.data.others ?? 60),
         };
         setTariffs(nextTariffs);
         setTariffInputs({
           facebook: String(nextTariffs.facebook),
-          amazon: String(nextTariffs.amazon),
-          whatsapp: String(nextTariffs.whatsapp),
-          whatsappFivesim: String(nextTariffs.whatsappFivesim),
-          whatsappTelnyx: String(nextTariffs.whatsappTelnyx),
+          walmart: String(nextTariffs.walmart),
           others: String(nextTariffs.others),
         });
       })
@@ -124,13 +97,9 @@ export default function AdminSettingsPage() {
     e.preventDefault();
     if (!token) return;
 
-    const payload: ServiceTariffs = {
+    const payload = {
       facebook: Number(tariffInputs.facebook),
-      amazon: Number(tariffInputs.amazon),
-      whatsapp: Number(tariffInputs.whatsapp),
-      // Keep provider-specific fields aligned with the main WhatsApp tariff.
-      whatsappFivesim: Number(tariffInputs.whatsapp),
-      whatsappTelnyx: Number(tariffInputs.whatsapp),
+      walmart: Number(tariffInputs.walmart),
       others: Number(tariffInputs.others),
     };
 
@@ -153,21 +122,15 @@ export default function AdminSettingsPage() {
       return;
     }
 
-    const saved = {
-      facebook: Number(res.data.facebook),
-      amazon: Number(res.data.amazon),
-      whatsapp: Number(res.data.whatsapp),
-      whatsappFivesim: Number(res.data.whatsappFivesim),
-      whatsappTelnyx: Number(res.data.whatsappTelnyx),
-      others: Number(res.data.others),
+    const saved: ServiceTariffs = {
+      facebook: Number(res.data.facebook ?? payload.facebook),
+      walmart: Number((res.data as any).walmart ?? payload.walmart),
+      others: Number(res.data.others ?? payload.others),
     };
     setTariffs(saved);
     setTariffInputs({
       facebook: String(saved.facebook),
-      amazon: String(saved.amazon),
-      whatsapp: String(saved.whatsapp),
-      whatsappFivesim: String(saved.whatsappFivesim),
-      whatsappTelnyx: String(saved.whatsappTelnyx),
+      walmart: String(saved.walmart),
       others: String(saved.others),
     });
     toast.success("OTP service prices updated.");
@@ -278,23 +241,12 @@ export default function AdminSettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price-amazon">Amazon (Rs)</Label>
+                <Label htmlFor="price-walmart">Walmart (Rs)</Label>
                 <Input
-                  id="price-amazon"
+                  id="price-walmart"
                   inputMode="numeric"
-                  value={tariffInputs.amazon}
-                  onChange={(ev) => updateTariffInput("amazon", ev.target.value)}
-                  disabled={loadingTariffs || savingTariffs}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="price-whatsapp">WhatsApp (Rs)</Label>
-                <Input
-                  id="price-whatsapp"
-                  inputMode="numeric"
-                  value={tariffInputs.whatsapp}
-                  onChange={(ev) => updateTariffInput("whatsapp", ev.target.value)}
+                  value={tariffInputs.walmart}
+                  onChange={(ev) => updateTariffInput("walmart", ev.target.value)}
                   disabled={loadingTariffs || savingTariffs}
                   required
                 />
@@ -313,7 +265,7 @@ export default function AdminSettingsPage() {
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
-                Live tariffs: FB Rs {tariffs.facebook}, Amazon Rs {tariffs.amazon}, WhatsApp Rs {tariffs.whatsapp}, Others Rs {tariffs.others}
+                Live tariffs: FB Rs {tariffs.facebook}, Walmart Rs {tariffs.walmart}, Others Rs {tariffs.others}
               </p>
               <Button type="submit" disabled={loadingTariffs || savingTariffs}>
                 {savingTariffs ? (
@@ -330,52 +282,7 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>WhatsApp route balances</CardTitle>
-          <CardDescription>
-            Live balance visibility for WhatsApp routing channels.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Route A</p>
-              <p className="mt-1 text-lg font-semibold">
-                {providerBalances?.smsBower == null ? "N/A" : providerBalances.smsBower}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Route B</p>
-              <p className="mt-1 text-lg font-semibold">
-                {providerBalances?.fiveSim == null ? "N/A" : providerBalances.fiveSim}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Route C</p>
-              <p className="mt-1 text-lg font-semibold">
-                {providerBalances?.telnyx == null ? "N/A" : providerBalances.telnyx}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Updated:{" "}
-              {providerBalances?.updatedAt
-                ? new Date(providerBalances.updatedAt).toLocaleString()
-                : "—"}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void refreshProviderBalances(undefined, { revalidate: true })}
-            >
-              Refresh balances
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+
 
       {/* Change Password */}
       <Card>

@@ -10,8 +10,8 @@ export default function WalmartPlatformPage(): React.ReactElement {
   const userPlatform = user?.preferredPlatform || "Facebook";
 
   useEffect(() => {
-    if (userPlatform === "WhatsApp") {
-      router.replace("/numbers?platform=whatsapp");
+    if (userPlatform === "Walmart") {
+      router.replace("/numbers?platform=walmart");
       return;
     }
     router.replace("/platforms");
