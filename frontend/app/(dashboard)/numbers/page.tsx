@@ -775,7 +775,7 @@ function NumbersPageContent() {
       return;
     }
 
-    if (rawActive && (platformMismatch || !hasReceivedOtp)) {
+    if (rawActive && !hasReceivedOtp) {
       setShowSwapConfirmDialog(true);
       return;
     }
