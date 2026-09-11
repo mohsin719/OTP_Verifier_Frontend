@@ -14,7 +14,7 @@ import {
   YAxis,
   CartesianGrid
 } from "recharts";
-import { ShieldAlert, Users, Activity, DollarSign, KeyRound, RefreshCw, Layers, Settings, Smartphone } from "lucide-react";
+import { ShieldAlert, Users, Activity, DollarSign, KeyRound, RefreshCw, Layers, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -224,19 +224,6 @@ export default function AdminDashboardPage() {
                 <div>
                   <div className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors">Financial Ledger</div>
                   <div className="text-xs text-muted-foreground mt-0.5">Audit debits, deposits, refunds, and admin balance adjustments.</div>
-                </div>
-              </Link>
-
-              <Link
-                href="/manage/numbers"
-                className="p-3 bg-white rounded-xl border border-slate-200/90 hover:border-blue-500 hover:shadow-sm transition-all flex items-start gap-3 block group"
-              >
-                <div className="p-2 rounded-lg bg-slate-100 text-slate-700 group-hover:bg-slate-900 group-hover:text-white transition-colors">
-                  <Smartphone className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="font-bold text-slate-900 group-hover:text-slate-900 transition-colors">Virtual Inventory</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">Inventory pool sync, lease tracking, and line availability.</div>
                 </div>
               </Link>
             </div>

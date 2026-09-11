@@ -14,7 +14,6 @@ import {
   Menu,
   Settings,
   Shield,
-  Smartphone,
   Users,
   X,
 } from "lucide-react";
@@ -34,7 +33,6 @@ const WALLET_CACHE_TTL_MS = 30_000;
 const adminNav = [
   { href: "/manage", label: "Admin Overview", icon: LayoutDashboard },
   { href: "/manage/services", label: "Services & Pricing", icon: Layers },
-  { href: "/manage/numbers", label: "Numbers", icon: Smartphone },
   { href: "/manage/platform-status", label: "Platform Status", icon: Activity },
   { href: "/manage/failure-logs", label: "Failure Logs", icon: AlertTriangle },
   { href: "/manage/users", label: "Users", icon: Users },

@@ -24,7 +24,6 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AddBalanceHub } from "@/components/wallet/add-balance-hub";
 import { useApi } from "@/hooks/use-api";
 import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
@@ -189,7 +188,6 @@ function TxDescriptionCell({
 export default function WalletPage(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const { balancePkr, isLoading, setBalance, ownerUserId } = useWalletStore();
-  const [activeWalletTab, setActiveWalletTab] = useState<"deposit" | "history">("deposit");
   const [page, setPage] = useState(1);
   const [limit] = useState(15);
 
@@ -433,76 +431,8 @@ export default function WalletPage(): React.ReactElement {
         </div>
       ) : null}
 
-      {/* ─── Mode Switcher (Deposit & Add Balance vs Ledger History) ─── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
-        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 border border-slate-200/80 shadow-inner w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setActiveWalletTab("deposit")}
-            className={cn(
-              "flex-1 sm:flex-initial flex items-center justify-center gap-2 py-2 px-5 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer",
-              activeWalletTab === "deposit"
-                ? "bg-white text-blue-700 shadow-xs border border-slate-200/60"
-                : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-            )}
-          >
-            <Plus className="h-4 w-4 stroke-[3]" />
-            <span>Deposit &amp; Add Balance</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveWalletTab("history")}
-            className={cn(
-              "flex-1 sm:flex-initial flex items-center justify-center gap-2 py-2 px-5 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer",
-              activeWalletTab === "history"
-                ? "bg-white text-blue-700 shadow-xs border border-slate-200/60"
-                : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-            )}
-          >
-            <History className="h-4 w-4" />
-            <span>Transaction History</span>
-            {total > 0 && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                {total}
-              </span>
-            )}
-          </button>
-        </div>
-
-        <p className="text-xs text-slate-500 font-medium">
-          {activeWalletTab === "deposit"
-            ? "Multiple payment methods: Binance Pay, USDT (TRC-20/BEP-20) & JazzCash"
-            : "Audited record of all top-ups, deductions, and refunds"}
-        </p>
-      </div>
-
-      {activeWalletTab === "deposit" ? (
-        <Card className="border-slate-200/90 bg-white shadow-sm rounded-2xl overflow-hidden">
-          <div className="h-1.5 w-full bg-gradient-to-r from-blue-600 via-emerald-500 to-[#F3BA2F]" />
-          <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50 p-4 sm:p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <div>
-                <CardTitle className="text-base sm:text-lg font-extrabold text-slate-900">
-                  Select Payment Channel &amp; Top Up
-                </CardTitle>
-                <CardDescription className="text-xs text-slate-500 mt-0.5">
-                  Send payment to our verified Binance USDT wallet or JazzCash account, then submit proof for immediate ledger update.
-                </CardDescription>
-              </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-bold text-emerald-700 self-start sm:self-auto shadow-2xs">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Zero Risk • 100% Guaranteed</span>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            <AddBalanceHub onSuccessClose={() => setActiveWalletTab("history")} />
-          </CardContent>
-        </Card>
-      ) : (
-        /* ─── Transaction History Table ─── */
-        <Card className="border-slate-200 bg-white shadow-2xs">
+      {/* ─── Transaction History Table ─── */}
+      <Card className="border-slate-200 bg-white shadow-2xs">
         <CardHeader className="pb-3 border-b border-slate-100">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
@@ -750,7 +680,6 @@ export default function WalletPage(): React.ReactElement {
           )}
         </CardContent>
       </Card>
-      )}
     </div>
   );
 }
