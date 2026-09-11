@@ -72,28 +72,28 @@ export const PLATFORM_VISUALS: Record<
 > = {
   Facebook: {
     Icon: Tag,
-    color: "text-blue-400",
-    bgColor: "bg-blue-500/15",
-    border: "border-blue-500/35",
+    color: "text-blue-600",
+    bgColor: "bg-blue-50",
+    border: "border-blue-200",
   },
   Walmart: {
     Icon: ShoppingBag,
-    color: "text-orange-400",
-    bgColor: "bg-orange-500/15",
-    border: "border-orange-500/35",
+    color: "text-orange-600",
+    bgColor: "bg-orange-50",
+    border: "border-orange-200",
   },
   Others: {
     Icon: Globe,
-    color: "text-emerald-400",
-    bgColor: "bg-emerald-500/15",
-    border: "border-emerald-500/35",
+    color: "text-emerald-600",
+    bgColor: "bg-emerald-50",
+    border: "border-emerald-200",
   },
 };
 
 export function serviceTypeToPlatform(raw: string | null | undefined): PlatformOption {
   const value = raw?.trim().toLowerCase() ?? "";
-  if (value === "facebook") return "Facebook";
-  if (value === "walmart") return "Walmart";
+  if (value === "facebook" || value === "fb") return "Facebook";
+  if (value === "walmart" || value === "wr") return "Walmart";
   if (value === "others" || value === "other" || value === "generic") return "Others";
   return "Others";
 }

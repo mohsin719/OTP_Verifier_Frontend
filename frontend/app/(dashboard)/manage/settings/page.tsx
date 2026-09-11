@@ -219,12 +219,23 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/[0.03] to-transparent">
         <CardHeader>
-          <CardTitle>OTP service pricing</CardTitle>
-          <CardDescription>
-            Set per-platform OTP charges. User wallet deduction uses these values.
-          </CardDescription>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                OTP Service Pricing & Profit Margins
+              </CardTitle>
+              <CardDescription>
+                Quick default rates below, or open the full catalog to manage 100+ services with carrier costs &amp; margin formulas.
+              </CardDescription>
+            </div>
+            <Button asChild variant="outline" size="sm" className="border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0">
+              <a href="/manage/services">
+                Open Full Pricing Engine →
+              </a>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={(e) => void handleSaveTariffs(e)} className="space-y-4">

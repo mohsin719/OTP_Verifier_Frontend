@@ -142,20 +142,20 @@ export default function AdminDashboardPage() {
             <div className="mt-4 h-[320px] w-full min-w-0">
               <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="oklch(1 0 0 / 0.1)" />
-                  <XAxis dataKey="name" stroke="oklch(0.65 0.03 260)" tickLine={false} axisLine={false} dy={10} />
-                  <YAxis stroke="oklch(0.65 0.03 260)" tickLine={false} axisLine={false} dx={-10} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="name" stroke="#64748b" tickLine={false} axisLine={false} dy={10} />
+                  <YAxis stroke="#64748b" tickLine={false} axisLine={false} dx={-10} />
                   <Tooltip
-                    cursor={{ fill: 'oklch(1 0 0 / 0.05)' }}
+                    cursor={{ fill: 'rgba(37, 99, 235, 0.04)' }}
                     contentStyle={{
-                      background: "oklch(0.17 0.03 260)",
-                      border: "1px solid oklch(1 0 0 / 0.08)",
-                      borderRadius: "8px",
-                      boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.3)",
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "10px",
+                      boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.1)",
                     }}
-                    itemStyle={{ color: 'white', fontWeight: 500 }}
+                    itemStyle={{ color: '#0f172a', fontWeight: 600 }}
                   />
-                  <Bar dataKey="value" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} maxBarSize={60} />
+                  <Bar dataKey="value" fill="#2563eb" radius={[6, 6, 0, 0]} maxBarSize={60} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -167,22 +167,22 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 shadow-sm bg-secondary/20">
+        <Card className="border-border/50 shadow-sm bg-slate-50/50">
           <CardHeader>
             <CardTitle>Administrative Actions</CardTitle>
             <CardDescription>Quick links for system management</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3 text-sm">
-              <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/manage/users'}>
+              <div className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer" onClick={() => window.location.href = '/manage/users'}>
                 <div className="font-medium text-foreground">User Management</div>
                 <div className="text-xs text-muted-foreground mt-1">Suspend accounts, adjust balances, and audit user activity logs.</div>
               </div>
-              <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/manage/numbers'}>
+              <div className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer" onClick={() => window.location.href = '/manage/numbers'}>
                 <div className="font-medium text-foreground">Virtual Inventory</div>
                 <div className="text-xs text-muted-foreground mt-1">Add or remove leased lines, and monitor routing connectivity and status.</div>
               </div>
-              <div className="p-3 bg-background rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/manage/transactions'}>
+              <div className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer" onClick={() => window.location.href = '/manage/transactions'}>
                 <div className="font-medium text-foreground">Financial Ledger</div>
                 <div className="text-xs text-muted-foreground mt-1">Review all system debits, credits, and manual administrative transfers.</div>
               </div>

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Suspense } from "react";
-import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { GlobalLoader } from "@/components/ui/global-loader";
 
@@ -12,12 +11,7 @@ export function Providers({
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <NextThemesProvider
-      attribute="class"
-      defaultTheme="dark"
-      enableSystem
-      disableTransitionOnChange
-    >
+    <>
       <Suspense fallback={null}>
         <GlobalLoader />
       </Suspense>
@@ -25,13 +19,16 @@ export function Providers({
       <Toaster
         richColors
         closeButton
-        position="top-center"
+        position="bottom-right"
+        duration={4000}
         toastOptions={{
           classNames: {
-            toast: "glass-panel border-border",
+            toast: "glass-panel border border-slate-200/90 shadow-xl font-sans text-xs sm:text-sm",
+            title: "font-semibold text-slate-900",
+            description: "text-slate-600 text-xs",
           },
         }}
       />
-    </NextThemesProvider>
+    </>
   );
 }

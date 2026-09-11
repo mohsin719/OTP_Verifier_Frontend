@@ -57,7 +57,7 @@ export function AvatarPickerDialog({
 
         <div className="flex flex-col items-center gap-4 rounded-xl border border-border/60 bg-muted/20 px-4 py-5">
           <div className="relative h-24 w-24 overflow-hidden rounded-full ring-2 ring-primary/40 ring-offset-2 ring-offset-background">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src={getAvatarImageUrl(previewPreset)}
               alt={previewPreset.label}
@@ -83,7 +83,7 @@ export function AvatarPickerDialog({
                 aria-label={`Select ${preset.label} avatar`}
                 aria-pressed={selected}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                { }
                 <img
                   src={getAvatarImageUrl(preset)}
                   alt=""

@@ -1,0 +1,14 @@
+{
+  "name": "otp-verifier-frontend-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Frontend root workspace runner",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:turbo": "npm --prefix frontend run dev:turbo",
+    "build": "npm --prefix frontend run build",
+    "build:hostinger": "npm --prefix frontend run build:hostinger",
+    "start": "npm --prefix frontend run start",
+    "lint": "npm --prefix frontend run lint"
+  }
+}

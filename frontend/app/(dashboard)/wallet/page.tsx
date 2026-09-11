@@ -5,19 +5,30 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Banknote,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  History,
+  Plus,
   RefreshCw,
   RotateCcw,
   Shield,
+  ShieldCheck,
   Smartphone,
+  Wallet,
   WifiOff,
   type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RechargePopup } from "@/components/dialogs/recharge-popup";
+import { AddBalanceHub } from "@/components/wallet/add-balance-hub";
 import { useApi } from "@/hooks/use-api";
 import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
+import { useCurrencyStore, formatDualBalance, formatDualPrice } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 type TxRow = {
@@ -62,20 +73,18 @@ function ApiErrorPanel({
       window.location.hostname === "127.0.0.1");
 
   return (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-center">
-      <WifiOff className="mx-auto mb-3 h-8 w-8 text-amber-400" />
-      <p className="font-medium">{message}</p>
+    <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-6 text-center">
+      <WifiOff className="mx-auto mb-3 h-8 w-8 text-amber-500" />
+      <p className="font-bold text-slate-800">{message}</p>
       {isLocal ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          Local dev: start backend with{" "}
-          <code className="rounded bg-secondary px-1.5 py-0.5 text-xs">npm run dev</code> in{" "}
-          <code className="rounded bg-secondary px-1.5 py-0.5 text-xs">OTP_Verifier</code>.
+        <p className="mt-2 text-xs text-slate-500">
+          Local backend check: make sure backend is running on port 4000.
         </p>
       ) : null}
       <Button
         size="sm"
         variant="outline"
-        className="mt-4 gap-2"
+        className="mt-4 gap-2 border-slate-200 font-semibold"
         onClick={onRetry}
         disabled={isRetrying}
       >
@@ -101,32 +110,32 @@ const TX_TYPE_VISUAL: Record<
   { label: string; icon: LucideIcon; iconWrap: string; iconColor: string; chip: string }
 > = {
   DEBIT: {
-    label: "Charge",
+    label: "Number Lease",
     icon: Smartphone,
-    iconWrap: "bg-amber-500/15",
-    iconColor: "text-amber-400",
-    chip: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+    iconWrap: "bg-amber-50 border border-amber-200",
+    iconColor: "text-amber-600",
+    chip: "bg-amber-50 text-amber-700 border-amber-200",
   },
   REFUND: {
-    label: "Refund",
+    label: "Auto-Refund",
     icon: RotateCcw,
-    iconWrap: "bg-emerald-500/15",
-    iconColor: "text-emerald-400",
-    chip: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
+    iconWrap: "bg-emerald-50 border border-emerald-200",
+    iconColor: "text-emerald-600",
+    chip: "bg-emerald-50 text-emerald-700 border-emerald-200 font-bold",
   },
   ADMIN_ADJUSTMENT: {
-    label: "Admin",
-    icon: Shield,
-    iconWrap: "bg-violet-500/15",
-    iconColor: "text-violet-400",
-    chip: "bg-violet-500/15 text-violet-300 border-violet-500/25",
+    label: "Balance Top-Up",
+    icon: ShieldCheck,
+    iconWrap: "bg-blue-50 border border-blue-200",
+    iconColor: "text-blue-600",
+    chip: "bg-blue-50 text-blue-700 border-blue-200 font-bold",
   },
   CREDIT: {
-    label: "Credit",
+    label: "Deposit",
     icon: ArrowDownLeft,
-    iconWrap: "bg-sky-500/15",
-    iconColor: "text-sky-400",
-    chip: "bg-sky-500/15 text-sky-300 border-sky-500/25",
+    iconWrap: "bg-emerald-50 border border-emerald-200",
+    iconColor: "text-emerald-600",
+    chip: "bg-emerald-50 text-emerald-700 border-emerald-200",
   },
 };
 
@@ -135,9 +144,9 @@ function getTxTypeVisual(type: string) {
     TX_TYPE_VISUAL[type] ?? {
       label: type.replace(/_/g, " "),
       icon: Banknote,
-      iconWrap: "bg-secondary",
-      iconColor: "text-muted-foreground",
-      chip: "bg-secondary text-muted-foreground border-border/50",
+      iconWrap: "bg-slate-100 border border-slate-200",
+      iconColor: "text-slate-600",
+      chip: "bg-slate-100 text-slate-700 border-slate-200",
     }
   );
 }
@@ -153,7 +162,7 @@ function TxDescriptionCell({
   const Icon = visual.icon;
 
   return (
-    <div className="flex items-center gap-3 min-w-[200px]">
+    <div className="flex items-center gap-3 min-w-[220px]">
       <div
         className={cn(
           "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
@@ -163,17 +172,15 @@ function TxDescriptionCell({
         <Icon className={cn("h-4 w-4", visual.iconColor)} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <p className="font-medium leading-snug text-foreground">{description}</p>
-          <span
-            className={cn(
-              "inline-flex shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-              visual.chip,
-            )}
-          >
-            {visual.label}
-          </span>
-        </div>
+        <p className="font-semibold text-xs sm:text-sm text-slate-800 leading-snug">{description}</p>
+        <span
+          className={cn(
+            "mt-0.5 inline-flex shrink-0 rounded-md border px-1.5 py-0.2 text-[10px] font-semibold tracking-wide",
+            visual.chip,
+          )}
+        >
+          {visual.label}
+        </span>
       </div>
     </div>
   );
@@ -182,8 +189,10 @@ function TxDescriptionCell({
 export default function WalletPage(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const { balancePkr, isLoading, setBalance, ownerUserId } = useWalletStore();
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [activeWalletTab, setActiveWalletTab] = useState<"deposit" | "history">("deposit");
   const [page, setPage] = useState(1);
-  const [limit] = useState(20);
+  const [limit] = useState(15);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams({
@@ -213,6 +222,14 @@ export default function WalletPage(): React.ReactElement {
   const items = txData?.items ?? [];
   const total = txData?.total ?? 0;
   const summary = txData?.summary;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const { exchangeRate, fetchExchangeRate } = useCurrencyStore();
+
+  useEffect(() => {
+    void fetchExchangeRate();
+  }, [fetchExchangeRate]);
+
+  const dualBalance = formatDualBalance(balancePkr, exchangeRate);
 
   useEffect(() => {
     if (walletData && user?.id) {
@@ -220,11 +237,6 @@ export default function WalletPage(): React.ReactElement {
     }
   }, [walletData, setBalance, user?.id]);
 
-  const pkrBalanceFormatter = new Intl.NumberFormat("en-PK", {
-    style: "currency",
-    currency: "PKR",
-    maximumFractionDigits: 0,
-  });
   const pkrAmountFormatter = new Intl.NumberFormat("en-PK", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
@@ -236,26 +248,45 @@ export default function WalletPage(): React.ReactElement {
   };
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 pb-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 pb-12 pt-2 sm:pt-4">
+      {/* ─── Top Header with Balance & Action CTA ─── */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-2 border-b border-slate-100">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Wallet</h1>
-          <p className="text-muted-foreground">
-            Balance, money in/out summary, and full transaction history.
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-600 mb-1">
+            <Wallet className="h-4 w-4" />
+            <span>Financial Overview &amp; Ledger</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+            Wallet &amp; Transactions
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Manage your balance, add funds, and inspect automated carrier charges and refunds.
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="gap-2 self-start"
-          onClick={retryAll}
-          disabled={txValidating || walletValidating}
-        >
-          <RefreshCw
-            className={cn("h-4 w-4", (txValidating || walletValidating) && "animate-spin")}
-          />
-          Refresh
-        </Button>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            type="button"
+            onClick={() => setActiveWalletTab("deposit")}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold shadow-sm hover:shadow-md transition-all gap-1.5 rounded-xl h-9.5 px-4 cursor-pointer"
+          >
+            <Plus className="h-4 w-4 stroke-[3]" />
+            <span>Deposit Funds</span>
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2 border-slate-200 font-semibold text-slate-700 rounded-xl h-9.5 hover:bg-slate-50"
+            onClick={retryAll}
+            disabled={txValidating || walletValidating}
+          >
+            <RefreshCw
+              className={cn("h-3.5 w-3.5", (txValidating || walletValidating) && "animate-spin")}
+            />
+            <span>Refresh</span>
+          </Button>
+        </div>
       </div>
 
       {walletError ? (
@@ -266,103 +297,230 @@ export default function WalletPage(): React.ReactElement {
         />
       ) : null}
 
+      {/* ─── Main Metrics Grid ─── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Current balance
-            </p>
+        {/* Card 1: Available Balance */}
+        <Card className="border-slate-200 bg-white shadow-2xs relative overflow-hidden flex flex-col justify-between">
+          <div className="h-1 w-full bg-gradient-to-r from-blue-600 to-indigo-600" />
+          <CardContent className="p-4 pt-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Available Balance
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowRechargeModal(true)}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+              >
+                + Add
+              </button>
+            </div>
             {balancePkr === null || isLoading || ownerUserId !== user?.id ? (
-              <Skeleton className="mt-2 h-9 w-32" />
+              <Skeleton className="mt-2 h-8 w-32" />
             ) : (
-              <p className="mt-2 text-2xl font-bold tabular-nums">
-                {pkrBalanceFormatter.format(balancePkr)}
-              </p>
+              <div className="mt-2">
+                <p className="text-2xl sm:text-3xl font-black tracking-tight tabular-nums text-slate-900 leading-none">
+                  {dualBalance.usd}
+                </p>
+                <p className="text-xs font-bold text-slate-500 tabular-nums mt-1">
+                  ≈ {dualBalance.pkr}
+                </p>
+              </div>
             )}
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+              <span>Auto-refunded if no SMS arrives</span>
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="border-emerald-500/20 bg-emerald-500/5">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-emerald-500/15 p-2">
-              <ArrowDownLeft className="h-5 w-5 text-emerald-400" />
+        {/* Card 2: Total Top-ups (Money In) */}
+        <Card className="border-emerald-200 bg-emerald-50/40 shadow-2xs relative overflow-hidden">
+          <div className="h-1 w-full bg-emerald-500" />
+          <CardContent className="p-4 pt-4 flex items-center gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 border border-emerald-200">
+              <ArrowDownLeft className="h-5 w-5" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total received</p>
-              <p className="text-xl font-semibold tabular-nums text-emerald-400">
-                {summary ? `Rs ${pkrAmountFormatter.format(summary.totalInPkr)}` : "—"}
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+                Total Inflow
+              </p>
+              <p className="text-xl font-black tabular-nums text-emerald-700 mt-0.5 leading-tight">
+                {summary ? `+${formatDualPrice(summary.totalInPkr, exchangeRate).usd}` : "—"}
+              </p>
+              <p className="text-[10px] font-semibold text-emerald-600 mt-0.5">
+                {summary ? `(${formatDualPrice(summary.totalInPkr, exchangeRate).pkr})` : "Deposits & refunds"}
               </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-red-500/20 bg-red-500/5">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-red-500/15 p-2">
-              <ArrowUpRight className="h-5 w-5 text-red-400" />
+        {/* Card 3: Total Spent (Money Out) */}
+        <Card className="border-slate-200 bg-white shadow-2xs relative overflow-hidden">
+          <div className="h-1 w-full bg-gradient-to-r from-amber-500 to-rose-500" />
+          <CardContent className="p-4 pt-4 flex items-center gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+              <ArrowUpRight className="h-5 w-5" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total spent</p>
-              <p className="text-xl font-semibold tabular-nums text-red-400">
-                {summary ? `Rs ${pkrAmountFormatter.format(summary.totalOutPkr)}` : "—"}
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Total Spent
+              </p>
+              <p className="text-xl font-black tabular-nums text-slate-900 mt-0.5 leading-tight">
+                {summary ? formatDualPrice(summary.totalOutPkr, exchangeRate).usd : "—"}
+              </p>
+              <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
+                {summary ? `(${formatDualPrice(summary.totalOutPkr, exchangeRate).pkr})` : "Successful leases only"}
               </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 bg-secondary/10">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-sky-500/15 p-2">
-              <Banknote className="h-5 w-5 text-sky-400" />
+        {/* Card 4: Transactions count */}
+        <Card className="border-slate-200 bg-white shadow-2xs relative overflow-hidden">
+          <div className="h-1 w-full bg-blue-500" />
+          <CardContent className="p-4 pt-4 flex items-center gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-100">
+              <Banknote className="h-5 w-5" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Transactions</p>
-              <p className="text-xl font-semibold tabular-nums">{summary?.count ?? "—"}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Ledger Entries
+              </p>
+              <p className="text-xl font-black tabular-nums text-slate-900 mt-0.5">
+                {summary?.count ?? "—"}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Audited transactions</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* ─── Breakdown Strip ─── */}
       {summary ? (
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border/50 bg-secondary/10 px-4 py-3 text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Shield className="h-4 w-4 text-violet-400" />
-              Admin top-ups
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-blue-700">
+              <ShieldCheck className="h-4 w-4 text-blue-600" />
+              <span>Wallet Recharges &amp; Top-Ups</span>
             </div>
-            <p className="mt-1 font-semibold tabular-nums text-violet-300">
+            <p className="mt-2 text-xl font-black tabular-nums text-slate-900">
               Rs {pkrAmountFormatter.format(summary.adminTopupsPkr)}
             </p>
+            <p className="mt-1 text-[11px] text-slate-500">Credited to your balance</p>
           </div>
-          <div className="rounded-xl border border-border/50 bg-secondary/10 px-4 py-3 text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <ArrowUpRight className="h-4 w-4 text-amber-400" />
-              Number charges
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+              <Smartphone className="h-4 w-4 text-amber-600" />
+              <span>Dedicated Number Spend</span>
             </div>
-            <p className="mt-1 font-semibold tabular-nums">
+            <p className="mt-2 text-xl font-black tabular-nums text-slate-900">
               Rs {pkrAmountFormatter.format(summary.numberSpendPkr)}
             </p>
+            <p className="mt-1 text-[11px] text-slate-500">Paid only when OTP was delivered</p>
           </div>
-          <div className="rounded-xl border border-border/50 bg-secondary/10 px-4 py-3 text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <RotateCcw className="h-4 w-4 text-emerald-400" />
-              Refunds received
+
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-emerald-700">
+              <RotateCcw className="h-4 w-4 text-emerald-600" />
+              <span>Automatic Refunds Restored</span>
             </div>
-            <p className="mt-1 font-semibold tabular-nums text-emerald-400">
+            <p className="mt-2 text-xl font-black tabular-nums text-emerald-700">
               Rs {pkrAmountFormatter.format(summary.refundsPkr)}
             </p>
+            <p className="mt-1 text-[11px] text-slate-500">100% money back on timed-out lines</p>
           </div>
         </div>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Transaction history</CardTitle>
-          <CardDescription>
-            When money came in, when it went out, and admin notes on balance changes.
-          </CardDescription>
+      {/* ─── Mode Switcher (Deposit & Add Balance vs Ledger History) ─── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
+        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 border border-slate-200/80 shadow-inner w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setActiveWalletTab("deposit")}
+            className={cn(
+              "flex-1 sm:flex-initial flex items-center justify-center gap-2 py-2 px-5 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer",
+              activeWalletTab === "deposit"
+                ? "bg-white text-blue-700 shadow-xs border border-slate-200/60"
+                : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+            )}
+          >
+            <Plus className="h-4 w-4 stroke-[3]" />
+            <span>Deposit &amp; Add Balance</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveWalletTab("history")}
+            className={cn(
+              "flex-1 sm:flex-initial flex items-center justify-center gap-2 py-2 px-5 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer",
+              activeWalletTab === "history"
+                ? "bg-white text-blue-700 shadow-xs border border-slate-200/60"
+                : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+            )}
+          >
+            <History className="h-4 w-4" />
+            <span>Transaction History</span>
+            {total > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                {total}
+              </span>
+            )}
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-500 font-medium">
+          {activeWalletTab === "deposit"
+            ? "Multiple payment methods: Binance Pay, USDT (TRC-20/BEP-20) & JazzCash"
+            : "Audited record of all top-ups, deductions, and refunds"}
+        </p>
+      </div>
+
+      {activeWalletTab === "deposit" ? (
+        <Card className="border-slate-200/90 bg-white shadow-sm rounded-2xl overflow-hidden">
+          <div className="h-1.5 w-full bg-gradient-to-r from-blue-600 via-emerald-500 to-[#F3BA2F]" />
+          <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50 p-4 sm:p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <CardTitle className="text-base sm:text-lg font-extrabold text-slate-900">
+                  Select Payment Channel &amp; Top Up
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-500 mt-0.5">
+                  Send payment to our verified Binance USDT wallet or JazzCash account, then submit proof for immediate ledger update.
+                </CardDescription>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-bold text-emerald-700 self-start sm:self-auto shadow-2xs">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Zero Risk • 100% Guaranteed</span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6">
+            <AddBalanceHub onSuccessClose={() => setActiveWalletTab("history")} />
+          </CardContent>
+        </Card>
+      ) : (
+        /* ─── Transaction History Table ─── */
+        <Card className="border-slate-200 bg-white shadow-2xs">
+        <CardHeader className="pb-3 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                <History className="h-4 w-4 text-blue-600" />
+                <span>Transaction History</span>
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                Complete timeline of top-ups, line deductions, and automatic balance restorations.
+              </CardDescription>
+            </div>
+            <span className="self-start sm:self-auto text-xs font-semibold text-slate-400">
+              {total} Total Transactions
+            </span>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6">
           {txError ? (
             <ApiErrorPanel
               message={txError.message}
@@ -370,48 +528,79 @@ export default function WalletPage(): React.ReactElement {
               isRetrying={txValidating}
             />
           ) : txLoading && !txData ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+                <Skeleton key={i} className="h-12 w-full rounded-xl" />
               ))}
             </div>
           ) : (
             <>
+              {/* Desktop Table View */}
               <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[800px] text-sm">
+                <table className="w-full min-w-[760px] text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="pb-3 pr-4 font-medium">Date</th>
-                      <th className="pb-3 pr-4 font-medium">Description</th>
-                      <th className="pb-3 pr-4 font-medium">In</th>
-                      <th className="pb-3 pr-4 font-medium">Out</th>
-                      <th className="pb-3 font-medium">Admin note</th>
+                    <tr className="border-b border-slate-200 text-left text-xs uppercase font-bold tracking-wider text-slate-400">
+                      <th className="pb-3 pr-4">Date &amp; Time</th>
+                      <th className="pb-3 pr-4">Activity &amp; Type</th>
+                      <th className="pb-3 pr-4 text-emerald-700">In (+PKR)</th>
+                      <th className="pb-3 pr-4 text-slate-700">Out (-PKR)</th>
+                      <th className="pb-3">Admin Notes</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((row) => (
-                      <tr key={row.id} className="border-b border-border/40">
-                        <td className="py-3 pr-4 text-xs text-muted-foreground whitespace-nowrap">
+                      <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+                        <td className="py-3.5 pr-4 text-xs font-mono text-slate-500 whitespace-nowrap">
                           {formatDateTime(row.createdAt)}
                         </td>
-                        <td className="py-3 pr-4">
+                        <td className="py-3.5 pr-4">
                           <TxDescriptionCell
                             description={row.description}
                             type={row.type}
                           />
                         </td>
-                        <td className="py-3 pr-4 tabular-nums font-medium text-emerald-400">
-                          {row.direction === "in"
-                            ? `+Rs ${pkrAmountFormatter.format(row.amountPkr)}`
-                            : "—"}
+                        <td className="py-3.5 pr-4 tabular-nums font-mono">
+                          {row.direction === "in" ? (() => {
+                            const dual = formatDualPrice(row.amountPkr, exchangeRate);
+                            return (
+                              <div className="inline-flex flex-col">
+                                <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-xs font-bold">
+                                  +{dual.usd}
+                                </span>
+                                <span className="text-[10px] font-medium text-slate-400 pl-0.5 mt-0.5">
+                                  ({dual.pkr})
+                                </span>
+                              </div>
+                            );
+                          })() : (
+                            <span className="text-slate-400 font-normal">—</span>
+                          )}
                         </td>
-                        <td className="py-3 pr-4 tabular-nums font-medium text-red-400">
-                          {row.direction === "out"
-                            ? `Rs ${pkrAmountFormatter.format(Math.abs(row.amountPkr))}`
-                            : "—"}
+                        <td className="py-3.5 pr-4 tabular-nums font-mono">
+                          {row.direction === "out" ? (() => {
+                            const dual = formatDualPrice(Math.abs(row.amountPkr), exchangeRate);
+                            return (
+                              <div className="inline-flex flex-col">
+                                <span className="text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md text-xs font-bold">
+                                  -{dual.usd}
+                                </span>
+                                <span className="text-[10px] font-medium text-slate-400 pl-0.5 mt-0.5">
+                                  ({dual.pkr})
+                                </span>
+                              </div>
+                            );
+                          })() : (
+                            <span className="text-slate-400 font-normal">—</span>
+                          )}
                         </td>
-                        <td className="max-w-[220px] py-3 text-sm text-muted-foreground">
-                          {row.adminNote ?? "—"}
+                        <td className="py-3.5 text-xs text-slate-600 max-w-[200px]">
+                          {row.adminNote ? (
+                            <span className="inline-block bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-md truncate font-medium">
+                              {row.adminNote}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -419,94 +608,159 @@ export default function WalletPage(): React.ReactElement {
                 </table>
               </div>
 
+              {/* Mobile Card List */}
               <div className="space-y-3 md:hidden">
                 {items.map((row) => {
                   const visual = getTxTypeVisual(row.type);
                   const Icon = visual.icon;
+                  const dual = formatDualPrice(Math.abs(row.amountPkr), exchangeRate);
                   return (
-                  <div
-                    key={row.id}
-                    className="rounded-xl border border-border/50 bg-secondary/10 p-4 space-y-2"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                          visual.iconWrap,
-                        )}
-                      >
-                        <Icon className={cn("h-4 w-4", visual.iconColor)} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium leading-snug">{row.description}</p>
+                    <div
+                      key={row.id}
+                      className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={cn(
+                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                              visual.iconWrap,
+                            )}
+                          >
+                            <Icon className={cn("h-4 w-4", visual.iconColor)} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900 leading-snug">{row.description}</p>
                             <span
                               className={cn(
-                                "mt-1 inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase",
+                                "mt-0.5 inline-flex rounded-md border px-1.5 py-0.2 text-[9px] font-bold uppercase",
                                 visual.chip,
                               )}
                             >
                               {visual.label}
                             </span>
                           </div>
+                        </div>
+
+                        <div className="flex flex-col items-end shrink-0">
                           <span
                             className={cn(
-                              "shrink-0 text-sm font-bold tabular-nums",
-                              row.direction === "in" ? "text-emerald-400" : "text-red-400",
+                              "font-mono text-xs sm:text-sm font-black tabular-nums px-2 py-0.5 rounded-md",
+                              row.direction === "in"
+                                ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
+                                : "text-slate-900 bg-slate-100 border border-slate-200",
                             )}
                           >
-                            {row.direction === "in" ? "+" : "−"}Rs{" "}
-                            {pkrAmountFormatter.format(Math.abs(row.amountPkr))}
+                            {row.direction === "in" ? "+" : "−"}{dual.usd}
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-400 mt-0.5 tabular-nums">
+                            ({dual.pkr})
                           </span>
                         </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          {formatDateTime(row.createdAt)}
-                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+                        <span>{formatDateTime(row.createdAt)}</span>
+                        {row.adminNote ? (
+                          <span className="font-semibold text-blue-600 truncate max-w-[160px]">
+                            {row.adminNote}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
-                    {row.adminNote ? (
-                      <p className="rounded-lg bg-violet-500/10 px-2 py-1.5 text-xs text-violet-200">
-                        <span className="font-medium">Admin: </span>
-                        {row.adminNote}
-                      </p>
-                    ) : null}
-                  </div>
                   );
                 })}
               </div>
 
               {items.length === 0 ? (
-                <p className="py-8 text-center text-muted-foreground">No transactions yet.</p>
-              ) : null}
-
-              <div className="mt-6 flex flex-col gap-3 border-t border-border/40 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground">
-                  Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
-                </p>
-                <div className="flex gap-2">
+                <div className="py-12 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/40">
+                  <p className="font-bold text-slate-700">No transactions recorded yet</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Add balance or lease a number from the Services tab to see transactions here.
+                  </p>
                   <Button
+                    type="button"
+                    onClick={() => setShowRechargeModal(true)}
                     size="sm"
-                    variant="outline"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
+                    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold"
                   >
-                    Previous
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPage((p) => p + 1)}
-                    disabled={page * limit >= total}
-                  >
-                    Next
+                    Add Balance Now
                   </Button>
                 </div>
-              </div>
+              ) : null}
+
+              {/* ─── Pagination Controls ─── */}
+              {total > 0 && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                  <p className="text-xs text-slate-500 order-2 sm:order-1">
+                    Showing <span className="font-semibold text-slate-800">{(page - 1) * limit + 1}</span> to{" "}
+                    <span className="font-semibold text-slate-800">{Math.min(page * limit, total)}</span> of{" "}
+                    <span className="font-semibold text-slate-800">{total}</span> transactions
+                  </p>
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-1.5 order-1 sm:order-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs font-semibold border-slate-200"
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+                        Prev
+                      </Button>
+
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          const pageNum = i + 1;
+                          return (
+                            <button
+                              key={pageNum}
+                              type="button"
+                              onClick={() => setPage(pageNum)}
+                              className={cn(
+                                "h-8 min-w-[2rem] px-2 rounded-lg text-xs font-bold transition-colors",
+                                page === pageNum
+                                  ? "bg-blue-600 text-white shadow-xs"
+                                  : "text-slate-600 hover:bg-slate-100",
+                              )}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs font-semibold border-slate-200"
+                        disabled={page >= totalPages}
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      >
+                        Next
+                        <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </CardContent>
       </Card>
+      )}
+
+      {/* ─── Direct Recharge Modal from Wallet Page ─── */}
+      <RechargePopup
+        open={showRechargeModal}
+        onOpenChange={setShowRechargeModal}
+        showMinimumMessage={true}
+        description="A minimum recharge of Rs 500 is required."
+      />
     </div>
   );
 }

@@ -72,37 +72,37 @@ export function AdminOverviewSection(): React.ReactElement {
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-border/50 bg-secondary/10 p-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Users className="h-4 w-4 text-blue-400" />
+              <Users className="h-4 w-4 text-blue-600" />
               Total users
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums">{stats.totalUsers}</p>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">{stats.totalUsers}</p>
           </div>
-          <div className="rounded-xl border border-border/50 bg-secondary/10 p-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Users className="h-4 w-4 text-violet-400" />
+              <Users className="h-4 w-4 text-indigo-600" />
               New users (30 days)
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums">
+            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">
               {stats.activeUsersLast30Days}
             </p>
           </div>
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <CircleDollarSign className="h-4 w-4 text-emerald-400" />
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+            <div className="flex items-center gap-2 text-xs text-emerald-700 font-medium">
+              <CircleDollarSign className="h-4 w-4 text-emerald-600" />
               Number spend (all users)
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-emerald-400">
+            <p className="mt-2 text-2xl font-bold tabular-nums text-emerald-700">
               Rs {stats.revenuePkrApprox}
             </p>
           </div>
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Clock className="h-4 w-4 text-amber-400" />
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+            <div className="flex items-center gap-2 text-xs text-amber-700 font-medium">
+              <Clock className="h-4 w-4 text-amber-600" />
               Waiting for OTP
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-amber-300">
+            <p className="mt-2 text-2xl font-bold tabular-nums text-amber-700">
               {stats.pendingOtpRequests}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">Pending requests now</p>

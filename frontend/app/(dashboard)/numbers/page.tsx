@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo, startTransition, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Copy, Phone, RefreshCw, ShieldCheck, Clock, Wifi, Info } from "lucide-react";
+import { Copy, Phone, RefreshCw, ShieldCheck, Clock, Wifi, Info, Sparkles, Check, AlertCircle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { io, type Socket } from "socket.io-client";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,10 @@ import { useApi } from "@/hooks/use-api";
 import { getPublicEnv } from "@/lib/env";
 import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
+import { useCurrencyStore, formatDualPrice } from "@/lib/currency";
 import { PlatformBanner } from "@/components/platform/platform-banner";
+import { ServiceBrandIcon } from "@/components/services/service-brand-icon";
+import { CountryFlag } from "@/components/ui/country-flag";
 import {
   getPlatformPricePkr,
   getPlatformVisual,
@@ -40,6 +43,8 @@ import {
 } from "@/lib/platforms";
 import { cn } from "@/lib/utils";
 import { getNumberFlowErrorMessage } from "@/lib/number-errors";
+import { findFallbackService, type ServiceCatalogItem } from "@/lib/services";
+import { findCountry } from "@/lib/countries";
 
 type ActiveNumber = {
   e164: string;
@@ -125,6 +130,7 @@ function formatCountdown(seconds: number): string {
   const s = seconds % 60;
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
+const formatTime = formatCountdown;
 
 /** Derive seconds remaining from ISO timestamp */
 function secondsUntil(isoStr: string): number {
@@ -136,8 +142,36 @@ function NumbersPageContent() {
   const user = useAuthStore((s) => s.user);
   const { balancePkr, ownerUserId } = useWalletStore();
   const searchParams = useSearchParams();
-  const urlPlatform = platformFromQueryParam(searchParams.get("platform"));
+  const urlService = searchParams.get("service");
+  const catalogService = urlService ? findFallbackService(urlService) : null;
+  const urlCountryId = searchParams.get("country");
+  const currentCountry = findCountry(urlCountryId) || findCountry("187");
+  const rawUrlPlatform = searchParams.get("platform");
+  const urlPlatform = rawUrlPlatform
+    ? platformFromQueryParam(rawUrlPlatform)
+    : urlService
+      ? serviceTypeToPlatform(urlService)
+      : null;
   const preferredPlatform = serviceTypeToPlatform(user?.preferredPlatform || "Facebook");
+
+  const effectiveCountryId = urlCountryId || "187";
+  const { data: liveServices } = useApi<ServiceCatalogItem[]>(
+    `/api/services?country=${effectiveCountryId}`,
+    {
+      cacheTtlMs: 30000,
+      disableDedupe: false,
+    }
+  );
+
+  const liveService = useMemo(() => {
+    if (!liveServices || !urlService) return null;
+    const code = urlService.toLowerCase().trim();
+    return (
+      liveServices.find(
+        (s) => s.serviceCode.toLowerCase() === code || s.name.toLowerCase() === code
+      ) || null
+    );
+  }, [liveServices, urlService]);
 
   const {
     data: fetchedActive,
@@ -238,6 +272,15 @@ function NumbersPageContent() {
     (rawActive?.isLiveLease !== false && leaseRemainingSec > 0);
   const sessionComplete = hasReceivedOtp && !isLiveLease;
 
+  // HeroSMS minimum activation hold period: 120 seconds (2 minutes)
+  const elapsedSec = rawActive?.leasedUntil
+    ? Math.max(0, LEASE_TTL_MINUTES * 60 - countdown)
+    : 120;
+  const cancelLockRemaining = rawActive?.leasedUntil
+    ? Math.max(0, 120 - elapsedSec)
+    : 0;
+  const isCancelLocked = cancelLockRemaining > 0;
+
   /** Hide expired leases without OTP immediately when timer hits zero */
   const active = useMemo(() => {
     if (!rawActive) {
@@ -290,10 +333,30 @@ function NumbersPageContent() {
       ? activePlatform
       : (urlPlatform ?? preferredPlatform);
   const selectedPlatformVisual = getPlatformVisual(selectedPlatform);
-  const serviceType = normalizeServiceType(selectedPlatform);
+  const serviceType = urlService
+    ? urlService.toLowerCase().trim()
+    : normalizeServiceType(selectedPlatform);
+  const exactServiceUsd = liveService?.costUsd ?? catalogService?.costUsd;
   const baseServicePrice = getPlatformPricePkr(selectedPlatform, platformTariffs);
-  const servicePrice = baseServicePrice;
-  const pricingUnavailable = Boolean(token) && Boolean(tariffError);
+  const servicePrice = liveService?.pricePkr ?? catalogService?.pricePkr ?? baseServicePrice;
+  const pricingUnavailable = Boolean(token) && Boolean(tariffError) && !catalogService && !liveService;
+
+  const exchangeRate = useCurrencyStore((s) => s.exchangeRate);
+  const dualPrice = formatDualPrice(servicePrice, exchangeRate, exactServiceUsd);
+
+  // Selected service name and code
+  const selectedServiceName =
+    liveService?.name ||
+    catalogService?.name ||
+    (urlService
+      ? (urlService === "fb" ? "Facebook" : urlService === "wr" ? "Walmart" : urlService.charAt(0).toUpperCase() + urlService.slice(1))
+      : selectedPlatformVisual.displayName);
+
+  const selectedServiceCode =
+    liveService?.serviceCode ||
+    catalogService?.serviceCode ||
+    urlService ||
+    (selectedPlatform === "Facebook" ? "fb" : selectedPlatform === "Walmart" ? "wr" : "others");
 
   const platformMismatch =
     Boolean(active) &&
@@ -321,6 +384,16 @@ function NumbersPageContent() {
 
   const displayPlatform = displayActiveSession ? activePlatform : selectedPlatform;
   const displayPlatformVisual = getPlatformVisual(displayPlatform);
+
+  // Active leased session service name and code
+  const activeServiceCode = displayActiveSession?.serviceType?.toLowerCase() || selectedServiceCode;
+  const activeCatalogItem = activeServiceCode ? findFallbackService(activeServiceCode) : null;
+  const activeServiceName =
+    activeCatalogItem?.name ||
+    (activeServiceCode === "fb" ? "Facebook" : activeServiceCode === "wr" ? "Walmart" : activeServiceCode ? (activeServiceCode.charAt(0).toUpperCase() + activeServiceCode.slice(1)) : activePlatformVisual.displayName);
+
+  const displayServiceName = displayActiveSession ? activeServiceName : selectedServiceName;
+  const displayServiceCode = displayActiveSession ? activeServiceCode : selectedServiceCode;
 
   const isWaitingForOtp =
     Boolean(displayActiveSession) &&
@@ -770,7 +843,7 @@ function NumbersPageContent() {
 
   const acquire = useCallback(async () => {
     if (!token) return;
-    if (pricingUnavailable || tariffLoading || !tariffPayload) {
+    if (pricingUnavailable || (!liveService && !catalogService && (tariffLoading || !tariffPayload))) {
       toast.error("Pricing is temporarily unavailable. Please try again shortly.");
       return;
     }
@@ -797,7 +870,10 @@ function NumbersPageContent() {
     }>("/api/numbers/acquire", {
       method: "POST",
       accessToken: token,
-      body: JSON.stringify({ serviceType }),
+      body: JSON.stringify({
+        serviceType,
+        country: urlCountryId || undefined,
+      }),
     });
     setPending(false);
     if (!res.success) {
@@ -840,6 +916,9 @@ function NumbersPageContent() {
     pricingUnavailable,
     tariffLoading,
     tariffPayload,
+    liveService,
+    catalogService,
+    urlCountryId,
   ]);
 
   const copyNumber = useCallback(() => {
@@ -982,7 +1061,7 @@ function NumbersPageContent() {
 
   const confirmSwapNumber = useCallback(async (issue?: SwapIssueOption) => {
     if (!token) return;
-    if (pricingUnavailable || tariffLoading || !tariffPayload) {
+    if (pricingUnavailable || (!liveService && !catalogService && (tariffLoading || !tariffPayload))) {
       toast.error("Pricing is temporarily unavailable. Please try again shortly.");
       return;
     }
@@ -1009,6 +1088,7 @@ function NumbersPageContent() {
         accessToken: token,
         body: JSON.stringify({
           serviceType,
+          country: urlCountryId || undefined,
           ...(issue?.reason ? { reason: issue.reason } : {}),
         }),
       });
@@ -1064,6 +1144,9 @@ function NumbersPageContent() {
     pricingUnavailable,
     tariffLoading,
     tariffPayload,
+    liveService,
+    catalogService,
+    urlCountryId,
   ]);
 
   const confirmPostOtpChange = useCallback(async () => {
@@ -1086,17 +1169,20 @@ function NumbersPageContent() {
   const DisplayPlatformIcon = displayPlatformVisual.Icon;
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-2xl space-y-6">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-6 pb-20">
       {/* Header */}
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <h1 className="flex flex-wrap items-center gap-2 font-bold tracking-tight sm:gap-3">
-            <Phone className="h-6 w-6 shrink-0 text-primary sm:h-7 sm:w-7" />
-            Virtual US Number
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50/80 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+            <Phone className="h-3.5 w-3.5 text-blue-600" />
+            <span>Dedicated Virtual Line · 10-Minute Active Lease</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+            {currentCountry?.name ? `Virtual ${currentCountry.name} Number` : "Virtual Phone Number"}
           </h1>
-          <p className="text-muted-foreground">
-            Lease a temporary US number for{" "}
-            <strong className="text-foreground">{displayPlatformVisual.displayName}</strong>{" "}
+          <p className="text-xs sm:text-sm text-slate-500 max-w-xl">
+            Lease a temporary {currentCountry?.name || "virtual"} number for{" "}
+            <strong className="text-slate-900 font-bold">{displayServiceName}</strong>{" "}
             verification and receive OTP codes in real time.
           </p>
         </div>
@@ -1105,401 +1191,509 @@ function NumbersPageContent() {
           platform={displayPlatform}
           mode={displayActiveSession ? "active" : "selected"}
           pricePkr={servicePrice}
+          customServiceName={displayServiceName}
+          customEmoji={liveService?.emoji || catalogService?.emoji}
+          serviceCode={displayServiceCode}
+          costUsd={exactServiceUsd}
+          countryName={currentCountry?.name}
+          countryFlag={currentCountry?.flag}
+          countryCode={currentCountry?.code}
         />
         {pricingUnavailable ? (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-200">
             Pricing is temporarily unavailable. Number actions are paused until pricing sync recovers.
           </div>
         ) : null}
       </div>
 
-      {/* Active Number Card */}
-      <Card className="border-border/50 shadow-lg overflow-hidden">
-        <div className="h-1 w-full bg-linear-to-r from-primary/60 via-primary to-primary/60" />
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-lg">Active Number</CardTitle>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {displayActiveSession &&
-              displayActiveSession.otpStatus !== "EXPIRED" &&
-              displayActiveSession.otpStatus !== "FAILED" &&
-              !displayActiveSession.parsedOtp &&
-              !polledOtp ? (
-                <div
-                  className={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium ${
-                    wsConnected
-                      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                      : wsUnavailable
-                        ? "border-amber-500/20 bg-amber-500/10 text-amber-400"
-                        : "border-zinc-500/20 bg-zinc-500/10 text-zinc-500"
-                  }`}
-                >
-                  <Wifi className="h-3 w-3" />
-                  {wsConnected ? "Live" : wsUnavailable ? "Offline" : "Connecting"}
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <CardDescription>
-            OTP codes appear instantly via WebSocket push + polling fallback.
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent className="space-y-5">
-          {pageSuggestion && displayActiveSession ? (
-            <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
-              <strong className="text-sky-200">Tip:</strong> {pageSuggestion}
-            </div>
-          ) : null}
-          {platformMismatch && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-              You switched to{" "}
-              <strong className="text-amber-100">{selectedPlatformVisual.displayName}</strong>.
-              {hasReceivedOtp ? (
-                <>
-                  {" "}
-                  Your {activePlatformVisual.displayName} OTP session is complete. Tap{" "}
-                  <strong className="text-amber-100">
-                    Get {selectedPlatformVisual.displayName} Number
-                  </strong>{" "}
-                  below to lease a new number (Rs {servicePrice}).
-                </>
-              ) : (
-                <>
-                  {" "}
-                  Your current number was leased for a different platform. Tap{" "}
-                  <strong className="text-amber-100">
-                    Switch to {selectedPlatformVisual.displayName}
-                  </strong>{" "}
-                  below to cancel it, get your refund, and receive a new number.
-                </>
-              )}
-            </div>
-          )}
-          {showInitialSkeleton ? (
-            <div className="space-y-3">
-              <Skeleton className="h-20 w-full rounded-xl" />
-              <Skeleton className="h-12 w-full rounded-xl" />
-            </div>
-          ) : displayActiveSession ? (
-            <>
-              {sessionComplete && (
-                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-                  {activePlatformVisual.displayName} OTP received successfully. This session
-                  is complete — get a new {activePlatformVisual.displayName} number below
-                  (Rs {activeSessionPrice}).
-                </div>
-              )}
-              {/* Phone Number Display */}
-              <div className="rounded-xl border border-border/60 bg-secondary/20 p-3 sm:p-4 space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
-                          displayPlatformVisual.border,
-                          displayPlatformVisual.bgColor,
-                          displayPlatformVisual.color,
-                        )}
-                      >
-                        <DisplayPlatformIcon className="h-3.5 w-3.5" />
-                        {displayPlatformVisual.displayName}
-                      </span>
-                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                        Platform
-                      </span>
+      {/* ─── Two-Column Activation & Guide Hub (Responsive: Side-by-Side on Desktop, Stacked on Mobile) ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-stretch">
+        {/* ─── LEFT COLUMN (Desktop): Complete 'How It Works' Guide ─── */}
+        <div className="lg:col-span-5 order-2 lg:order-1 flex flex-col">
+          <Card className="border border-slate-200/90 shadow-sm rounded-2xl overflow-hidden bg-white flex flex-col justify-between h-full">
+            <div>
+              <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 via-teal-500 to-emerald-500" />
+              <CardHeader className="pb-2.5 border-b border-slate-100 bg-slate-50/50 p-3.5 sm:p-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100/80 text-blue-700 font-bold shadow-2xs">
+                      <Info className="h-3.5 w-3.5" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">
-                        US Number
-                      </p>
-                      <p className="text-xl sm:text-2xl font-bold font-mono tracking-wide text-foreground break-all">
-                        {displayActiveSession.e164}
+                      <CardTitle className="text-sm sm:text-base font-extrabold text-slate-900">How It Works</CardTitle>
+                      <CardDescription className="text-[10px] text-slate-500">Fast 4-step verification flow</CardDescription>
+                    </div>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200/80 px-2.5 py-0.5 text-xs font-semibold text-blue-700 shadow-2xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+                    <span>Quick Guide</span>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-3.5 sm:p-4 space-y-2.5">
+                <div className="space-y-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white font-black text-[10px] shadow-xs mt-0.5">
+                      1
+                    </span>
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="font-bold text-xs text-slate-900">Get Dedicated Line</p>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Tap &apos;Get {displayServiceName} Number&apos; to reserve a private dedicated line.
                       </p>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
-                    <Badge
-                      className={`text-xs font-semibold border ${
-                        statusColor[displayActiveSession.otpStatus] ?? statusColor.PENDING
-                      }`}
-                    >
-                      {displayActiveSession.otpStatus}
-                    </Badge>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      onClick={copyNumber}
-                      className="h-8 w-8 border-border/50 hover:border-primary/50 transition-colors"
-                      title="Copy number"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
 
-                {/* Countdown Timer */}
-                <div className="flex flex-col gap-2 pt-1 border-t border-border/40 sm:flex-row sm:items-center sm:gap-3">
-                  <div className="flex items-center gap-2">
-                    <Clock className={`h-4 w-4 shrink-0 ${timerColor}`} />
-                    <span className="text-xs text-muted-foreground">Expires in</span>
-                    <span className={`font-mono text-sm font-bold tabular-nums ${timerColor}`}>
-                      {formatCountdown(countdown)}
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white font-black text-[10px] shadow-xs mt-0.5">
+                      2
                     </span>
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="font-bold text-xs text-slate-900">Copy & Paste</p>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Copy the virtual number and paste it directly on {displayServiceName}&apos;s verification screen.
+                      </p>
+                    </div>
                   </div>
-                  {countdown === 0 && !hasReceivedOtp && (
-                    <span className="text-xs text-red-400 sm:ml-auto">
-                      Time expired — refunding…
+
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white font-black text-[10px] shadow-xs mt-0.5">
+                      3
                     </span>
-                  )}
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="font-bold text-xs text-slate-900">Real-Time SMS Arrival</p>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        OTP code appears automatically via live WebSocket push within &lt; 8 seconds.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white font-black text-[10px] shadow-xs mt-0.5">
+                      4
+                    </span>
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="font-bold text-xs text-slate-900">100% Refund Guarantee</p>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        If no SMS arrives within {LEASE_TTL_MINUTES} minutes, your payment is refunded automatically to your wallet.
+                      </p>
+                    </div>
+                  </div>
                 </div>
+              </CardContent>
+            </div>
+
+            {/* Bottom Quick Tips Box */}
+            <div className="p-2.5 sm:p-3 mx-3.5 mb-3.5 rounded-xl bg-gradient-to-r from-blue-50/90 via-indigo-50/80 to-blue-50/90 border border-blue-200/80 text-[11px] text-blue-900 space-y-1 shadow-2xs">
+              <div className="flex items-center gap-1.5 font-bold text-blue-800 text-[11px]">
+                <Sparkles className="h-3 w-3 text-blue-600" />
+                <span>Quick Verification Tips</span>
               </div>
+              <ul className="text-blue-950/80 space-y-0.5 text-[10px] sm:text-[11px] list-disc list-inside">
+                <li>If code is delayed 30–60s, trigger &apos;Resend OTP&apos; on {displayServiceName}.</li>
+                <li>Cancel anytime before OTP arrives for an instant refund.</li>
+                <li>Free number replacement available via &apos;Change Number&apos;.</li>
+              </ul>
+            </div>
+          </Card>
+        </div>
 
-              {/* OTP Display */}
-              <div className={`rounded-xl border p-4 sm:p-5 transition-all duration-500 ${
-                otpFlash
-                  ? "border-emerald-500/60 bg-emerald-500/10 shadow-[0_0_20px_rgba(34,197,94,0.15)]"
-                  : "border-border/60 bg-secondary/10"
-              }`}>
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest">
-                    Received OTP
-                  </p>
-                  {displayOtp && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={copyOtp}
-                      className="h-6 shrink-0 px-2 text-xs gap-1 hover:bg-emerald-500/10 hover:text-emerald-400"
-                    >
-                      <Copy className="h-3 w-3" />
-                      Copy
-                    </Button>
-                  )}
-                </div>
-
-                {displayOtp ? (
-                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
-                    <p className="text-2xl sm:text-4xl font-bold font-mono tracking-[0.15em] sm:tracking-[0.3em] text-emerald-400 break-all text-center sm:text-left">
-                      {displayOtp}
-                    </p>
-                    <ShieldCheck className="h-6 w-6 shrink-0 text-emerald-500" />
+        {/* ─── RIGHT COLUMN (Desktop): Virtual Number Line / Action Card ─── */}
+        <div className="lg:col-span-7 order-1 lg:order-2 flex flex-col">
+          <Card className="border border-slate-200/90 shadow-md rounded-2xl overflow-hidden bg-white flex flex-col justify-between h-full">
+            <div>
+              <div className="h-1.5 w-full bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-600" />
+              <CardHeader className="pb-2.5 border-b border-slate-100 bg-slate-50/50 p-3.5 sm:p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="text-sm sm:text-base font-bold text-slate-900">
+                      {displayActiveSession ? "Active Leased Line" : "Virtual Number Line"}
+                    </CardTitle>
+                    <CardDescription className="text-[11px] text-slate-500">
+                      {displayActiveSession
+                        ? "Live dedicated line awaiting incoming SMS"
+                        : "Dedicated line allocated instantly with auto-refund guarantee"}
+                    </CardDescription>
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-4">
-                    <div className="flex justify-center gap-1.5 sm:justify-start sm:gap-2">
-                      {[...Array(6)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="h-8 w-7 sm:h-9 sm:w-8 rounded-md border border-border/50 bg-secondary/30 animate-pulse"
-                          style={{ animationDelay: `${i * 100}ms` }}
-                        />
-                      ))}
-                    </div>
-                    {displayActiveSession.otpStatus === "PENDING" && (
-                      <div className="min-w-0 space-y-1.5 text-center text-xs text-muted-foreground sm:text-left">
-                        <p>
-                          Awaiting {expectedOtpLength}-digit SMS from{" "}
-                          <strong className={displayPlatformVisual.color}>
-                            {displayPlatformVisual.displayName}
-                          </strong>
-                        </p>
-                        <p className="text-amber-400/80 flex items-start justify-center gap-1 sm:justify-start">
-                          <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                          <span>
-                            If you do not receive the OTP within 30–60 seconds, please trigger
-                            &apos;Resend OTP&apos; directly from that particular platform.
-                          </span>
-                        </p>
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    {displayActiveSession &&
+                    displayActiveSession.otpStatus !== "EXPIRED" &&
+                    displayActiveSession.otpStatus !== "FAILED" &&
+                    !displayActiveSession.parsedOtp &&
+                    !polledOtp ? (
+                      <div
+                        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                          wsConnected
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-700 shadow-2xs"
+                            : wsUnavailable
+                              ? "border-amber-300 bg-amber-50 text-amber-700"
+                              : "border-slate-300 bg-slate-50 text-slate-600"
+                        }`}
+                      >
+                        <span className={cn("h-2 w-2 rounded-full", wsConnected ? "bg-emerald-500 animate-pulse" : "bg-slate-400")} />
+                        {wsConnected ? "Live Socket Active" : wsUnavailable ? "Offline" : "Connecting..."}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                        <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                        <span>Instant Delivery</span>
                       </div>
                     )}
                   </div>
-                )}
-
-              {isWaitingForOtp && (
-                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowCancelDialog(true)}
-                    className="flex-1 gap-2 border-border/50"
-                    disabled={loadingRefresh || loadingChangeNumber}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowSwapConfirmDialog(true)}
-                    className="flex-1 gap-2 border-border/50"
-                    disabled={
-                      loadingChangeNumber ||
-                      pricingUnavailable ||
-                      tariffLoading ||
-                      !tariffPayload
-                    }
-                  >
-                    {loadingChangeNumber ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                    {loadingChangeNumber ? "Changing…" : "Change Number"}
-                  </Button>
                 </div>
-              )}
+              </CardHeader>
 
-              {hasReceivedOtp && isLiveLease && !sessionComplete && (
-                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setHideCompletedSession(true)}
-                    className="flex-1 gap-2 border-border/50"
-                    disabled={
-                      loadingChangeNumber ||
-                      pricingUnavailable ||
-                      tariffLoading ||
-                      !tariffPayload
-                    }
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowPostOtpChangeDialog(true)}
-                    className="flex-1 gap-2 border-border/50"
-                    disabled={
-                      loadingChangeNumber ||
-                      pricingUnavailable ||
-                      tariffLoading ||
-                      !tariffPayload
-                    }
-                  >
-                    {loadingChangeNumber ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
+              <CardContent className="p-3 sm:p-4 space-y-3">
+                {pageSuggestion && displayActiveSession ? (
+                  <div className="rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-xs text-sky-800">
+                    <strong className="font-bold text-sky-900">Tip:</strong> {pageSuggestion}
+                  </div>
+                ) : null}
+                {platformMismatch && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900">
+                    You switched to{" "}
+                    <strong className="text-amber-950 font-bold">{selectedServiceName}</strong>.
+                    {hasReceivedOtp ? (
+                      <>
+                        {" "}
+                        Your {activeServiceName} OTP session is complete. Tap{" "}
+                        <strong className="text-amber-950 font-bold">
+                          Get {selectedServiceName} Number
+                        </strong>{" "}
+                        below to lease a new number.
+                      </>
                     ) : (
-                      <RefreshCw className="h-4 w-4" />
+                      <>
+                        {" "}
+                        Your current number was leased for a different service ({activeServiceName}). Tap{" "}
+                        <strong className="text-amber-950 font-bold">
+                          Switch to {selectedServiceName}
+                        </strong>{" "}
+                        below to cancel it, get your refund, and receive a new number.
+                      </>
                     )}
-                    {loadingChangeNumber ? "Changing…" : "Change Number"}
-                  </Button>
-                </div>
-              )}
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefreshStatus}
-                className="gap-2 w-full border-border/50"
-                disabled={loadingRefresh}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${loadingRefresh ? "animate-spin" : ""}`}
-                />
-                {loadingRefresh ? "Refreshing..." : "Refresh Status"}
-              </Button>
-
-            </>
-          ) : (
-            <div className="py-8 text-center space-y-4">
-              <div
-                className={cn(
-                  "mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border",
-                  displayPlatformVisual.border,
-                  displayPlatformVisual.bgColor,
-                  displayPlatformVisual.color,
+                  </div>
                 )}
-              >
-                <DisplayPlatformIcon className="h-8 w-8" />
-              </div>
-              <div className="space-y-1">
-                <p className="font-medium">No active number</p>
-                <p className="text-sm text-muted-foreground">
-                  Get a US number for{" "}
-                  <strong className="text-foreground">
-                    {displayPlatformVisual.displayName}
-                  </strong>{" "}
-                  verification.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Acquire — only when no live lease or session complete */}
-          {(!showInitialSkeleton &&
-            !isWaitingForOtp &&
-            (!displayActiveSession || sessionComplete || platformMismatch)) && (
-            <div className="space-y-2">
-              <Button
-                onClick={() => void acquire()}
-                disabled={
-                  pending ||
-                  pricingUnavailable ||
-                  tariffLoading ||
-                  !tariffPayload
-                }
-                className="w-full gap-2 font-semibold relative overflow-hidden group"
-                size="lg"
-              >
-                <span className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                {pending ? (
+                {showInitialSkeleton ? (
+                  <div className="space-y-2.5">
+                    <Skeleton className="h-16 w-full rounded-xl" />
+                    <Skeleton className="h-10 w-full rounded-xl" />
+                  </div>
+                ) : displayActiveSession ? (
                   <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    {platformMismatch ? "Switching platform…" : "Reserving number…"}
+                    {sessionComplete && (
+                      <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-xs text-emerald-900">
+                        {activeServiceName} OTP received successfully. This session
+                        is complete — get a new {activeServiceName} number below.
+                      </div>
+                    )}
+                    {/* Phone Number Display */}
+                    <div className="rounded-xl border border-slate-200/90 bg-slate-50/50 p-3 sm:p-3.5 space-y-2.5">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-xs font-bold text-blue-700 shadow-2xs">
+                              <ServiceBrandIcon serviceCode={displayServiceCode} name={displayServiceName} size={15} />
+                              <span>{displayServiceName}</span>
+                            </span>
+                            {currentCountry && (
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 shadow-2xs">
+                                <CountryFlag code={currentCountry.code} name={currentCountry.name} fallbackEmoji={currentCountry.flag} size="xs" />
+                                <span>{currentCountry.name}</span>
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                              Dedicated Virtual Number
+                            </p>
+                            <p className="text-lg sm:text-xl font-black font-mono tracking-wide text-slate-900 break-all">
+                              {displayActiveSession.e164}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
+                          <Badge
+                            className={`text-xs font-bold border px-2 py-0.5 rounded-md ${
+                              statusColor[displayActiveSession.otpStatus] ?? statusColor.PENDING
+                            }`}
+                          >
+                            {displayActiveSession.otpStatus}
+                          </Badge>
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={copyNumber}
+                            className="h-8 w-8 rounded-lg border-slate-200 bg-white hover:bg-slate-100 hover:border-blue-400 transition-colors cursor-pointer shadow-2xs"
+                            title="Copy number"
+                          >
+                            <Copy className="h-3.5 w-3.5 text-slate-700" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Countdown Timer */}
+                      <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-200/80 sm:flex-row sm:items-center sm:gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className={`h-3.5 w-3.5 shrink-0 ${timerColor}`} />
+                          <span className="text-[11px] font-medium text-slate-500">Expires in</span>
+                          <span className={`font-mono text-xs sm:text-sm font-black tabular-nums ${timerColor}`}>
+                            {formatCountdown(countdown)}
+                          </span>
+                        </div>
+                        {countdown === 0 && !hasReceivedOtp && (
+                          <span className="text-[11px] font-bold text-red-500 sm:ml-auto">
+                            Time expired — refunding to wallet…
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* OTP Display */}
+                    <div className={`rounded-xl border p-3 sm:p-3.5 transition-all duration-500 ${
+                      otpFlash
+                        ? "border-emerald-500 bg-emerald-50/80 shadow-[0_0_24px_rgba(16,185,129,0.2)]"
+                        : "border-slate-200 bg-white"
+                    }`}>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                            Received OTP Code
+                          </p>
+                        </div>
+                        {displayOtp && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={copyOtp}
+                            className="h-6 shrink-0 px-2 text-[11px] font-bold gap-1 text-emerald-700 hover:bg-emerald-100/70"
+                          >
+                            <Copy className="h-3 w-3" />
+                            Copy OTP
+                          </Button>
+                        )}
+                      </div>
+
+                      {displayOtp ? (
+                        <div className="flex flex-wrap items-center justify-center gap-2.5 sm:justify-start sm:gap-3 py-0.5">
+                          <p className="text-2xl sm:text-3xl font-black font-mono tracking-[0.2em] sm:tracking-[0.25em] text-emerald-600 break-all text-center sm:text-left">
+                            {displayOtp}
+                          </p>
+                          <ShieldCheck className="h-6 w-6 shrink-0 text-emerald-500" />
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex justify-center gap-1 sm:justify-start sm:gap-1.5">
+                            {[...Array(6)].map((_, i) => (
+                              <div
+                                key={i}
+                                className="h-8 w-6 sm:h-8.5 sm:w-7 rounded-lg border border-slate-200 bg-slate-100/80 animate-pulse flex items-center justify-center text-slate-300 font-mono text-sm"
+                                style={{ animationDelay: `${i * 120}ms` }}
+                              >
+                                -
+                              </div>
+                            ))}
+                          </div>
+                          {displayActiveSession.otpStatus === "PENDING" && (
+                            <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] sm:text-[11px] text-slate-500 pt-0.5">
+                              <span>Awaiting {expectedOtpLength}-digit code for <strong className="text-blue-600 font-bold">{displayServiceName}</strong></span>
+                              <span className="text-amber-700 font-medium inline-flex items-center gap-1">
+                                <Info className="h-3 w-3 text-amber-600 shrink-0" />
+                                Delayed? Tap &apos;Resend OTP&apos; in app
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                    {isWaitingForOtp && (
+                      <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => !isCancelLocked && setShowCancelDialog(true)}
+                          className={cn(
+                            "flex-1 h-9 gap-1.5 border font-bold transition-all text-xs",
+                            isCancelLocked
+                              ? "border-amber-200/90 bg-amber-50/60 text-amber-800/80 cursor-not-allowed hover:bg-amber-50/60 hover:text-amber-800/80"
+                              : "border-slate-200 text-slate-700 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
+                          )}
+                          disabled={loadingRefresh || loadingChangeNumber || isCancelLocked}
+                          title={
+                            isCancelLocked
+                              ? `Cancellation available in ${formatTime(cancelLockRemaining)}`
+                              : "Cancel number and refund balance"
+                          }
+                        >
+                          {isCancelLocked ? (
+                            <>
+                              <Clock className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
+                              <span>Cancel in {formatTime(cancelLockRemaining)}</span>
+                            </>
+                          ) : (
+                            "Cancel (Refund)"
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowSwapConfirmDialog(true)}
+                          className="flex-1 h-9 gap-1.5 border-slate-200 font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors text-xs"
+                          disabled={
+                            loadingChangeNumber ||
+                            pricingUnavailable ||
+                            tariffLoading ||
+                            !tariffPayload
+                          }
+                        >
+                          {loadingChangeNumber ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          )}
+                          {loadingChangeNumber ? "Changing…" : "Change Number"}
+                        </Button>
+                      </div>
+                    )}
+
+                    {hasReceivedOtp && isLiveLease && !sessionComplete && (
+                      <div className="mt-3.5 flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHideCompletedSession(true)}
+                          className="flex-1 gap-1.5 border-slate-200 font-semibold text-xs"
+                          disabled={
+                            loadingChangeNumber ||
+                            pricingUnavailable ||
+                            tariffLoading ||
+                            !tariffPayload
+                          }
+                        >
+                          Back
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowPostOtpChangeDialog(true)}
+                          className="flex-1 gap-1.5 border-slate-200 font-semibold text-xs"
+                          disabled={
+                            loadingChangeNumber ||
+                            pricingUnavailable ||
+                            tariffLoading ||
+                            !tariffPayload
+                          }
+                        >
+                          {loadingChangeNumber ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          )}
+                          {loadingChangeNumber ? "Changing…" : "Change Number"}
+                        </Button>
+                      </div>
+                    )}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefreshStatus}
+                      className="gap-2 w-full border-slate-200 bg-white hover:bg-slate-50 font-bold text-slate-700 shadow-2xs text-xs"
+                      disabled={loadingRefresh}
+                    >
+                      <RefreshCw
+                        className={`h-3.5 w-3.5 ${loadingRefresh ? "animate-spin" : ""}`}
+                      />
+                      {loadingRefresh ? "Refreshing..." : "Refresh Status"}
+                    </Button>
+
                   </>
                 ) : (
-                  <>
-                    <Phone className="h-4 w-4" />
-                    {platformMismatch
-                      ? hasReceivedOtp
-                        ? `Get ${selectedPlatformVisual.displayName} Number`
-                        : `Switch to ${selectedPlatformVisual.displayName}`
-                      : sessionComplete
-                        ? `Get New ${activePlatformVisual.displayName} Number`
-                        : `Get ${displayPlatformVisual.displayName} Number`}
-                  </>
+                  <div className="py-6 sm:py-7 text-center space-y-3.5">
+                    <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-100 bg-gradient-to-b from-blue-50 to-white shadow-md p-2.5">
+                      <div className="pointer-events-none absolute -inset-1 rounded-2xl bg-blue-400/15 blur-lg" />
+                      <ServiceBrandIcon
+                        serviceCode={displayServiceCode}
+                        name={displayServiceName}
+                        size={40}
+                        className="relative z-10 drop-shadow-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-1 max-w-sm mx-auto">
+                      <p className="text-base font-extrabold text-slate-900">
+                        Ready to Lease Virtual Line
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Get a dedicated {currentCountry?.name || "US"} number for{" "}
+                        <strong className="text-slate-900 font-bold">
+                          {displayServiceName}
+                        </strong>{" "}
+                        verification.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                        ⚡ Under 8s Arrival
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                        🛡️ 100% Refund
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                        ⏱️ {LEASE_TTL_MINUTES}-Min Window
+                      </span>
+                    </div>
+                  </div>
                 )}
-              </Button>
+              </CardContent>
             </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Instructions Card */}
-      <Card className="border-border/40 bg-secondary/10">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">How it works</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm font-medium text-foreground">
-            Service Charge: Rs {servicePrice} per OTP on {displayPlatformVisual.displayName}
-          </p>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside pl-0.5">
-            <li>
-              Click{" "}
-              <strong className="text-foreground">
-                Get {displayPlatformVisual.displayName} Number
-              </strong>{" "}
-              to lease a temporary number
-            </li>
-            <li>
-              Copy the number and paste it on{" "}
-              <strong className="text-foreground">{displayPlatformVisual.displayName}</strong>{" "}
-              signup or verification page
-            </li>
-            <li>OTP automatically appears here when SMS arrives — no typing needed</li>
-            <li>Click <strong className="text-foreground">Copy</strong> and paste the code on {displayPlatformVisual.displayName}</li>
-            <li>Number lease lasts {LEASE_TTL_MINUTES} minutes — OTP must arrive within this window</li>
-            <li>If no OTP arrives in time, your Rs {servicePrice} is automatically refunded</li>
-
-            <li>Use <strong className="text-foreground">Cancel</strong> anytime before OTP to get an instant refund</li>
-            <li>Use <strong className="text-foreground">Change Number</strong> to swap to a new number (same price, timer resets)</li>
-          </ol>
-        </CardContent>
-      </Card>
+            {/* Acquire Button pinned at bottom of card */}
+            {(!showInitialSkeleton &&
+              !isWaitingForOtp &&
+              (!displayActiveSession || sessionComplete || platformMismatch)) && (
+              <div className="p-4 sm:p-5 pt-0">
+                <Button
+                  onClick={() => void acquire()}
+                  disabled={
+                    pending ||
+                    pricingUnavailable ||
+                    tariffLoading ||
+                    !tariffPayload
+                  }
+                  className="w-full gap-2 font-black text-sm py-5 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md shadow-blue-600/20 active:scale-[0.98] transition-all relative overflow-hidden group cursor-pointer"
+                  size="lg"
+                >
+                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  {pending ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>{platformMismatch ? "Switching service…" : "Allocating virtual number…"}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Phone className="h-4 w-4 shrink-0" />
+                      <span>
+                        {platformMismatch
+                          ? hasReceivedOtp
+                            ? `Get ${selectedServiceName} Number • ${dualPrice.usd} (${dualPrice.pkr})`
+                            : `Switch to ${selectedServiceName}`
+                          : sessionComplete
+                            ? `Get New ${activeServiceName} Number • ${dualPrice.usd} (${dualPrice.pkr})`
+                            : `Get ${displayServiceName} Number • ${dualPrice.usd} (${dualPrice.pkr})`}
+                      </span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
 
       {/* Universal Recharge Popup */}
       <RechargePopup
@@ -1512,28 +1706,40 @@ function NumbersPageContent() {
 
       {/* Cancel — refund if no OTP yet */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel number?</DialogTitle>
-            <DialogDescription>
-              No OTP received yet. Cancelling will refund <strong>Rs {cancelRefundAmount}</strong> to
-              your wallet immediately.
+        <DialogContent className="sm:max-w-md rounded-2xl p-5 sm:p-6 bg-white border border-slate-200 shadow-xl">
+          <DialogHeader className="space-y-1.5 text-left">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-100 text-rose-700 shadow-2xs">
+                <AlertCircle className="h-4 w-4" />
+              </div>
+              <DialogTitle className="text-base sm:text-lg font-extrabold text-slate-900">Cancel Number & Refund?</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-slate-600 leading-relaxed pt-1">
+              No OTP received yet. Cancelling will release this virtual line and refund{" "}
+              <strong className="text-slate-900 font-bold">
+                {formatDualPrice(cancelRefundAmount, exchangeRate, exactServiceUsd).usd} ({formatDualPrice(cancelRefundAmount, exchangeRate, exactServiceUsd).pkr})
+              </strong>{" "}
+              directly to your wallet immediately.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+          <div className="flex flex-col gap-2 pt-3 sm:flex-row">
             <Button
               variant="outline"
-              className="flex-1"
+              className="flex-1 h-10 font-semibold border-slate-200 text-slate-700 hover:bg-slate-100 text-xs sm:text-sm"
               onClick={() => setShowCancelDialog(false)}
             >
-              Keep number
+              Keep Number
             </Button>
             <Button
-              className="flex-1"
+              className="flex-1 h-10 font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-sm text-xs sm:text-sm disabled:opacity-50 cursor-pointer"
               onClick={() => void handleRefundOnly()}
-              disabled={loadingRefresh}
+              disabled={loadingRefresh || isCancelLocked}
             >
-              {loadingRefresh ? "Processing…" : `Cancel & refund Rs ${cancelRefundAmount}`}
+              {isCancelLocked
+                ? `Cancel in ${formatTime(cancelLockRemaining)}`
+                : loadingRefresh
+                ? "Processing…"
+                : "Confirm & Refund"}
             </Button>
           </div>
         </DialogContent>
@@ -1541,31 +1747,36 @@ function NumbersPageContent() {
 
       {/* Swap confirm — old style keep/get */}
       <Dialog open={showSwapConfirmDialog} onOpenChange={setShowSwapConfirmDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change number?</DialogTitle>
-            <DialogDescription>
-              You will get a <strong>new US number</strong> at the same price (Rs {servicePrice}).
-              The {LEASE_TTL_MINUTES}-minute timer resets. No extra charge if OTP has not arrived yet.
+        <DialogContent className="sm:max-w-md rounded-2xl p-5 sm:p-6 bg-white border border-slate-200 shadow-xl">
+          <DialogHeader className="space-y-1.5 text-left">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-100 text-blue-700 shadow-2xs">
+                <RefreshCw className="h-4 w-4" />
+              </div>
+              <DialogTitle className="text-base sm:text-lg font-extrabold text-slate-900">Change Number?</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-slate-600 leading-relaxed pt-1">
+              You will get a new <strong className="text-slate-900 font-bold">{currentCountry?.name || "US"} number</strong> for {displayServiceName}.
+              The {LEASE_TTL_MINUTES}-minute timer resets. Free replacement since no OTP has arrived yet.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+          <div className="flex flex-col gap-2 pt-3 sm:flex-row">
             <Button
               variant="outline"
-              className="flex-1"
+              className="flex-1 h-10 font-semibold border-slate-200 text-slate-700 hover:bg-slate-100 text-xs sm:text-sm"
               onClick={() => setShowSwapConfirmDialog(false)}
             >
-              Keep number
+              Keep Number
             </Button>
             <Button
-              className="flex-1"
+              className="flex-1 h-10 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm text-xs sm:text-sm cursor-pointer"
               onClick={() => {
                 setShowSwapConfirmDialog(false);
                 setSelectedSwapIssueId(null);
                 setShowSwapDialog(true);
               }}
             >
-              Get new number
+              Get New Number
             </Button>
           </div>
         </DialogContent>
@@ -1573,15 +1784,19 @@ function NumbersPageContent() {
 
       {/* Swap issue report — step 2 */}
       <Dialog open={showSwapDialog} onOpenChange={setShowSwapDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Report issue</DialogTitle>
-            <DialogDescription>
-              Select the issue you faced with the old number. We will submit the report
-              and assign a new number immediately.
+        <DialogContent className="sm:max-w-md rounded-2xl p-5 sm:p-6 bg-white border border-slate-200 shadow-xl">
+          <DialogHeader className="space-y-1.5 text-left">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-100 text-blue-700 shadow-2xs">
+                <RotateCcw className="h-4 w-4" />
+              </div>
+              <DialogTitle className="text-base sm:text-lg font-extrabold text-slate-900">Report Issue</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-slate-500">
+              Select the issue you faced with the old number to get a fresh replacement immediately.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 pt-2">
+          <div className="space-y-2.5 pt-2">
             <div className="grid gap-2">
               {SWAP_ISSUE_OPTIONS.map((option) => {
                 const selected = option.id === selectedSwapIssue?.id;
@@ -1591,31 +1806,43 @@ function NumbersPageContent() {
                     type="button"
                     onClick={() => setSelectedSwapIssueId(option.id)}
                     className={cn(
-                      "rounded-lg border px-3 py-2.5 text-left text-sm transition-all",
+                      "flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left text-xs sm:text-sm transition-all cursor-pointer",
                       selected
-                        ? "border-primary/70 bg-primary/15 text-foreground shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
-                        : "border-border/60 bg-secondary/20 text-muted-foreground hover:border-primary/40 hover:bg-secondary/35",
+                        ? "border-blue-600 bg-blue-50/70 text-blue-950 font-semibold shadow-xs ring-1 ring-blue-600/30"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-slate-50/80 font-medium"
                     )}
                   >
-                    {option.label}
+                    <span>{option.label}</span>
+                    <div
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all",
+                        selected
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "border-slate-300 bg-white"
+                      )}
+                    >
+                      {selected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                    </div>
                   </button>
                 );
               })}
             </div>
             {selectedSwapIssue ? (
-              <p className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                {selectedSwapIssue.suggestion}
-              </p>
+              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/90 p-2.5 text-xs text-amber-900 shadow-2xs">
+                <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <span className="leading-snug">{selectedSwapIssue.suggestion}</span>
+              </div>
             ) : (
-              <p className="rounded-md border border-zinc-500/20 bg-zinc-500/10 px-3 py-2 text-xs text-zinc-300">
-                Select one issue to continue.
-              </p>
+              <div className="flex items-center gap-1.5 px-1 py-1 text-xs text-slate-400 italic">
+                <Info className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span>Select one issue above to continue.</span>
+              </div>
             )}
           </div>
-          <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+          <div className="flex flex-col gap-2 pt-3 sm:flex-row">
             <Button
               variant="outline"
-              className="flex-1"
+              className="flex-1 h-10 font-semibold border-slate-200 text-slate-700 hover:bg-slate-100 text-xs sm:text-sm"
               onClick={() => {
                 setShowSwapDialog(false);
                 setShowSwapConfirmDialog(true);
@@ -1624,7 +1851,7 @@ function NumbersPageContent() {
               Back
             </Button>
             <Button
-              className="flex-1"
+              className="flex-1 h-10 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm text-xs sm:text-sm disabled:opacity-50 cursor-pointer"
               onClick={() => selectedSwapIssue && void confirmSwapNumber(selectedSwapIssue)}
               disabled={
                 !selectedSwapIssue ||
@@ -1634,7 +1861,14 @@ function NumbersPageContent() {
                 !tariffPayload
               }
             >
-              Submit Report & Get New Number
+              {loadingChangeNumber ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin mr-1.5" />
+                  Assigning…
+                </>
+              ) : (
+                "Submit Report & Get New Number"
+              )}
             </Button>
           </div>
         </DialogContent>
@@ -1642,24 +1876,29 @@ function NumbersPageContent() {
 
       {/* Post-OTP: change only (no refund) */}
       <Dialog open={showPostOtpChangeDialog} onOpenChange={setShowPostOtpChangeDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change Number</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="sm:max-w-md rounded-2xl p-5 sm:p-6 bg-white border border-slate-200 shadow-xl">
+          <DialogHeader className="space-y-1.5 text-left">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-100 text-blue-700 shadow-2xs">
+                <RefreshCw className="h-4 w-4" />
+              </div>
+              <DialogTitle className="text-base sm:text-lg font-extrabold text-slate-900">Change Number</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-slate-600 leading-relaxed pt-1">
               OTP has already been received, so a refund is not available. Getting a new number
               will charge Rs {servicePrice}.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-2.5 pt-3">
             <Button
               variant="outline"
-              className="flex-1"
+              className="flex-1 h-10 font-semibold border-slate-200 text-slate-700 hover:bg-slate-100 text-xs sm:text-sm"
               onClick={() => setShowPostOtpChangeDialog(false)}
             >
               Cancel
             </Button>
             <Button
-              className="flex-1"
+              className="flex-1 h-10 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm text-xs sm:text-sm cursor-pointer"
               onClick={() => void confirmPostOtpChange()}
               disabled={
                 loadingChangeNumber ||
@@ -1668,7 +1907,14 @@ function NumbersPageContent() {
                 !tariffPayload
               }
             >
-              Change Number
+              {loadingChangeNumber ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin mr-1.5" />
+                  Changing…
+                </>
+              ) : (
+                "Change Number"
+              )}
             </Button>
           </div>
         </DialogContent>

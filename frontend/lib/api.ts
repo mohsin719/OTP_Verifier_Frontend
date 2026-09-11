@@ -1,5 +1,6 @@
 import { getPublicEnv } from '@/lib/env';
 import type { AuthUser } from '@/lib/auth-types';
+import type { ServiceCatalogItem } from '@/lib/services';
 
 export type ApiSuccess<T> = { success: true; data: T };
 export type ApiFail = { success: false; error: string };
@@ -398,6 +399,22 @@ export async function apiFetch<T>(
   }
 }
 
+export async function authGoogleSync(
+  body: { email: string; username?: string },
+): Promise<
+  ApiResult<{ accessToken: string; refreshToken: string; user: AuthUser }>
+> {
+  return apiFetch<{
+    accessToken: string;
+    refreshToken: string;
+    user: AuthUser;
+  }>('/api/auth/google', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    skipAuthRefresh: true,
+  });
+}
+
 export async function authLogin(
   body: Record<string, unknown>,
 ): Promise<
@@ -526,6 +543,16 @@ export async function getPublicConfig(): Promise<
   ApiResult<{ adminWhatsappE164: string }>
 > {
   return apiFetch<{ adminWhatsappE164: string }>('/api/config/public');
+}
+
+// Services Catalog (HeroSMS Live Routing)
+export async function getServices(
+  country?: string,
+): Promise<ApiResult<ServiceCatalogItem[]>> {
+  const query = country ? `?country=${encodeURIComponent(country)}` : '';
+  return apiFetch<ServiceCatalogItem[]>(`/api/services${query}`, {
+    cacheTtlMs: 30000,
+  });
 }
 
 // Wallet & transactions

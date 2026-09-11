@@ -3,7 +3,7 @@
 import type { ComponentType, ReactElement, ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronRight, Wallet } from "lucide-react";
+import { ChevronRight, Shield, Wallet } from "lucide-react";
 import type { AuthUser } from "@/lib/auth-types";
 import { isNavActive } from "@/lib/nav-utils";
 import { cn } from "@/lib/utils";
@@ -229,32 +229,58 @@ export function PremiumSidebarProfile({
   active?: boolean;
   onNavigate?: () => void;
 }): ReactElement {
+  const isAdmin = user.role === "ADMIN";
+
   return (
     <Link
       href={href}
       prefetch={false}
       onClick={onNavigate}
       className={cn(
-        "premium-sidebar__profile",
+        "premium-sidebar__profile group transition-all duration-200",
         active && "premium-sidebar__profile--active",
+        isAdmin && "hover:border-amber-500/30 hover:bg-amber-500/5",
       )}
     >
-      <div className="premium-sidebar__avatar-wrap">
+      <div className="premium-sidebar__avatar-wrap relative">
         <UserAvatar
           userId={user.id}
           username={user.username}
           publicId={user.publicId}
-          className="h-10 w-10 ring-2 ring-white/10"
+          className={cn(
+            "h-10 w-10 ring-2 transition-all",
+            isAdmin ? "ring-amber-400/50 shadow-sm shadow-amber-500/20" : "ring-white/10"
+          )}
         />
-        <span className="premium-sidebar__online" aria-label="Online" />
+        <span
+          className={cn(
+            "premium-sidebar__online",
+            isAdmin && "bg-amber-400 ring-amber-900/60"
+          )}
+          aria-label="Online"
+        />
       </div>
-      <div className="premium-sidebar__profile-info">
-        <p className="premium-sidebar__profile-name">
-          {user.username || user.publicId}
+      <div className="premium-sidebar__profile-info min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className="premium-sidebar__profile-name truncate font-bold">
+            {user.username || user.publicId}
+          </p>
+          {isAdmin && (
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-gradient-to-r from-amber-500/25 to-yellow-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300 shadow-xs shrink-0">
+              <Shield className="h-2.5 w-2.5 text-amber-400" />
+              Admin
+            </span>
+          )}
+        </div>
+        <p className="premium-sidebar__profile-email truncate text-[11px] text-slate-400 mt-0.5">
+          {isAdmin ? (
+            <span className="text-amber-200/70 font-medium">Administrator Panel</span>
+          ) : (
+            user.email
+          )}
         </p>
-        <p className="premium-sidebar__profile-email">{user.email}</p>
       </div>
-      <ChevronRight className="premium-sidebar__profile-arrow h-4 w-4" />
+      <ChevronRight className="premium-sidebar__profile-arrow h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
     </Link>
   );
 }
