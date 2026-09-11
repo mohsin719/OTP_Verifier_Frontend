@@ -63,6 +63,26 @@ async function refreshWithRetries(): Promise<
   return { ok: false };
 }
 
+function isJwtExpired(token: string): boolean {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return true;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const payload = JSON.parse(jsonPayload);
+    if (!payload.exp) return false;
+    return payload.exp * 1000 < Date.now() + 15000;
+  } catch {
+    return false;
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -116,6 +136,8 @@ export const useAuthStore = create<AuthState>()(
           return false;
         }
 
+        const isExpired = isJwtExpired(token);
+
         const refreshed = await refreshWithRetries();
         if (refreshed.ok) {
           const prevUserId = get().user?.id;
@@ -126,6 +148,13 @@ export const useAuthStore = create<AuthState>()(
           return true;
         }
 
+        // If refresh failed (network blip, temporary offline) BUT token is not expired yet,
+        // do not log out the user! Keep the valid token and user.
+        if (!isExpired) {
+          return true;
+        }
+
+        // Token is genuinely expired and refresh failed: now clear session
         useWalletStore.getState().invalidate();
         set({ token: null, user: null });
         return false;

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Outfit } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { CookieConsent } from "@/components/cookie-consent";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -95,6 +96,7 @@ export default function RootLayout({
       >
         <Providers>
           {isMaintenanceMode ? <MaintenanceScreen /> : children}
+          <CookieConsent />
         </Providers>
       </body>
     </html>

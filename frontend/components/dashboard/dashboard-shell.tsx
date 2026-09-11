@@ -70,7 +70,7 @@ export function DashboardShell({
 
   function isPublicDashboardRoute(path: string): boolean {
     const clean = (path || "").replace(/\/+$/, "") || "/";
-    return clean === "/numbers" || clean === "/services";
+    return clean === "/services";
   }
 
   useEffect(() => {

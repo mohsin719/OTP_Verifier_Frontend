@@ -33,6 +33,12 @@ export function PublicFooter(): ReactElement {
           >
             Refunds
           </Link>
+          <Link
+            href="/cookies"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Cookies
+          </Link>
         </nav>
         <p className="text-sm text-muted-foreground">
           US Num Hub — Virtual SMS verification platform

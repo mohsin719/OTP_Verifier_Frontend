@@ -172,6 +172,10 @@ export function DashboardFooter(): React.ReactElement {
             <Link href="/policies#terms" className="hover:text-slate-300 transition-colors">
               Terms
             </Link>
+            <span>·</span>
+            <Link href="/cookies" className="hover:text-slate-300 transition-colors">
+              Cookies
+            </Link>
           </div>
         </div>
       </div>
