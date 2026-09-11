@@ -276,7 +276,7 @@ function NumbersPageContent() {
     (rawActive?.isLiveLease !== false && leaseRemainingSec > 0);
   const sessionComplete = hasReceivedOtp && !isLiveLease;
 
-  // HeroSMS minimum activation hold period: 120 seconds (2 minutes)
+  // Carrier minimum activation hold period: 120 seconds (2 minutes)
   const elapsedSec = rawActive?.leasedUntil
     ? Math.max(0, LEASE_TTL_MINUTES * 60 - countdown)
     : 120;

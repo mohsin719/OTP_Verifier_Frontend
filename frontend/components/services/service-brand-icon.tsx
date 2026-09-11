@@ -15,7 +15,7 @@ export interface ServiceBrandIconProps {
 
 export { CompanyLogo };
 
-// ─── HeroSMS Code to Official Company Domain Registry ───
+// ─── Service Code to Official Company Domain Registry ───
 // Directly routes to the company's real domain for instant high-res vector/PNG logo retrieval
 const CODE_TO_DOMAIN: Record<string, string> = {
   // Top Popular
@@ -230,7 +230,7 @@ function getMonogram(name: string, code: string): string {
 /**
  * High-Performance Company Logo Renderer
  * - Powered 100% by Logo.dev CDN (500k monthly requests community plan)
- * - Uses verified Supabase website_domain or falls back to registered company domain
+ * - Uses verified catalog website_domain or falls back to registered company domain
  * - If domain is missing, immediately renders colorful monogram initials avatar
  * - Seamlessly falls back to initials on any network error (zero broken images)
  */

@@ -57,7 +57,7 @@ export default function CookiePolicyPage(): ReactElement {
                     identify you and you would need to sign in on every page.
                   </p>
                   <div className="mt-3 rounded-xl bg-slate-50 px-4 py-3 text-xs font-mono text-slate-500">
-                    sb-* (Supabase auth session) · HTTP-only · Expires with session
+                    refreshToken · Secure Session Token · HTTP-only · Encrypted
                   </div>
                 </div>
               </div>

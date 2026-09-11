@@ -545,7 +545,7 @@ export async function getPublicConfig(): Promise<
   return apiFetch<{ adminWhatsappE164: string }>('/api/config/public');
 }
 
-// Services Catalog (HeroSMS Live Routing)
+// Services Catalog (Carrier Live Routing)
 export async function getServices(
   country?: string,
 ): Promise<ApiResult<ServiceCatalogItem[]>> {

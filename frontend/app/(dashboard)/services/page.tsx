@@ -508,7 +508,7 @@ export default function ServicesCatalogPage() {
           </div>
         </div>
 
-        {/* ─── BOX 2 (Right): Step 2 — Select Country (HeroSMS Countries) ─── */}
+        {/* ─── BOX 2 (Right): Step 2 — Select Country ─── */}
         <div id="step-2-country-box" className="relative flex flex-col justify-between overflow-hidden rounded-[24px] border border-blue-600/30 bg-gradient-to-b from-[#1d4ed8] via-[#1e40af] to-[#1e3a8a] p-5 sm:p-6 text-white shadow-xl shadow-blue-950/20">
           <div className="pointer-events-none absolute -left-16 -top-16 h-40 w-40 rounded-full bg-indigo-400/15 blur-3xl" />
           <div className="relative z-10 space-y-3.5">
@@ -694,7 +694,7 @@ export default function ServicesCatalogPage() {
               All Available Verification Services
             </h3>
             <p className="text-xs text-slate-500">
-              Transparent PKR pricing with live HeroSMS API routing across 190+ countries
+              Transparent PKR pricing with live carrier API routing across 190+ countries
             </p>
           </div>
 

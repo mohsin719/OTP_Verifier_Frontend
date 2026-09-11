@@ -83,7 +83,7 @@ export default function ResetPasswordPage() {
       });
 
       if (updateError) {
-        toast.error(updateError.message || "Failed to update password in Supabase.");
+        toast.error(updateError.message || "Failed to update password. Please try again.");
         setPending(false);
         return;
       }

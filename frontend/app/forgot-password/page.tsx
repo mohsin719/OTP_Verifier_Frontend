@@ -35,7 +35,17 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email: trimmedEmail }),
       });
 
-      if (!checkRes.success || !checkRes.data?.exists) {
+      if (!checkRes.success) {
+        toast.error(checkRes.error || "Unable to verify email address. Please try again.");
+        setPending(false);
+        return;
+      }
+
+      const emailExists = Boolean(
+        checkRes.data?.exists ?? (checkRes as { exists?: boolean }).exists,
+      );
+
+      if (!emailExists) {
         toast.error("This email is not registered in our system. Please register first.");
         setPending(false);
         return;
@@ -72,7 +82,7 @@ export default function ForgotPasswordPage() {
           </div>
           <CardTitle className="text-xl font-bold">Forgot Password</CardTitle>
           <CardDescription>
-            Enter your registered email address and we&apos;ll send you a password recovery link via Supabase.
+            Enter your registered email address and we&apos;ll send you a password recovery link.
           </CardDescription>
         </CardHeader>
         <CardContent>

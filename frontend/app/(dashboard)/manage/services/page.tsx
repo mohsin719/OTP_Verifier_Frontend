@@ -655,7 +655,7 @@ export default function AdminServicesPage() {
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Oversee HeroSMS provider costs, formulate profit margins, and update live customer prices.
+            Oversee carrier wholesale costs, formulate profit margins, and update live customer prices.
           </p>
         </div>
 
@@ -712,7 +712,7 @@ export default function AdminServicesPage() {
                 +{marginRule.marginValue}{marginRule.marginType === "PERCENT" ? "%" : " Rs"}
               </p>
               <p className="text-[11px] font-semibold text-slate-500 mt-1">
-                Added on HeroSMS carrier cost
+                Added on carrier wholesale cost
               </p>
             </div>
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
@@ -759,10 +759,10 @@ export default function AdminServicesPage() {
               Automated Pricing Formula
             </div>
             <h2 className="text-lg font-black text-white">
-              Formula: HeroSMS Base Cost + Profit Margin = Selling Price
+              Formula: Carrier Base Cost + Profit Margin = Selling Price
             </h2>
             <p className="text-xs text-slate-300 mt-0.5">
-              Aap jo bhi margin yahan set karenge, wo HeroSMS rate me add ho kar tamam services ki new price ban jayegi. User ke wallet se wahi selling price cut hogi.
+              Aap jo bhi margin yahan set karenge, wo carrier base rate me add ho kar tamam services ki new price ban jayegi. User ke wallet se wahi selling price cut hogi.
             </p>
           </div>
         </div>
@@ -869,7 +869,7 @@ export default function AdminServicesPage() {
               Example
             </span>
             <span>
-              Agar HeroSMS rate <strong className="text-white font-mono">Rs 20</strong> hai aur margin{" "}
+              Agar carrier rate <strong className="text-white font-mono">Rs 20</strong> hai aur margin{" "}
               <strong className="text-white font-mono">
                 {marginRule.marginType === "PERCENT" ? `+${marginRule.marginValue}%` : `+Rs ${marginRule.marginValue}`}
               </strong>{" "}
@@ -978,7 +978,7 @@ export default function AdminServicesPage() {
               <tr className="border-b border-slate-200/80 bg-slate-50/80 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
                 <th className="py-3.5 px-4">Service &amp; App</th>
                 <th className="py-3.5 px-3">Category</th>
-                <th className="py-3.5 px-4 text-right">HeroSMS Cost</th>
+                <th className="py-3.5 px-4 text-right">Carrier Cost</th>
                 <th className="py-3.5 px-4 text-center">Your Profit</th>
                 <th className="py-3.5 px-4 text-right">Selling Price (User Pays)</th>
                 <th className="py-3.5 px-3 text-center">Status</th>
@@ -990,7 +990,7 @@ export default function AdminServicesPage() {
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400">
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
-                    <p className="font-semibold text-xs">Fetching live HeroSMS prices &amp; catalog...</p>
+                    <p className="font-semibold text-xs">Fetching live carrier prices &amp; catalog...</p>
                   </td>
                 </tr>
               ) : filteredServices.length === 0 ? (
@@ -1221,7 +1221,7 @@ export default function AdminServicesPage() {
 
           <form onSubmit={handleCreateService} className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700">Service Code (HeroSMS ID)</label>
+              <label className="text-xs font-bold text-slate-700">Service Code (Carrier ID)</label>
               <Input
                 placeholder="e.g. wa, tg, fb"
                 value={newCode}
