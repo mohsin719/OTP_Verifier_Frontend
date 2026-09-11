@@ -8,15 +8,16 @@ import {
   AlertTriangle,
   CreditCard,
   History,
+  Layers,
   LayoutDashboard,
   LogOut,
   Menu,
   Settings,
   Shield,
   Smartphone,
+  Users,
   X,
 } from "lucide-react";
-import { RechargePopup } from "@/components/dialogs/recharge-popup";
 import { PremiumSidebarShell } from "@/components/dashboard/premium-sidebar";
 import { TopNavbar } from "@/components/dashboard/top-navbar";
 import { DashboardFooter } from "@/components/dashboard/dashboard-footer";
@@ -32,15 +33,15 @@ const WALLET_CACHE_TTL_MS = 30_000;
 
 const adminNav = [
   { href: "/manage", label: "Admin Overview", icon: LayoutDashboard },
-  { href: "/manage/services", label: "Services & Pricing", icon: Smartphone },
+  { href: "/manage/services", label: "Services & Pricing", icon: Layers },
   { href: "/manage/numbers", label: "Numbers", icon: Smartphone },
   { href: "/manage/platform-status", label: "Platform Status", icon: Activity },
   { href: "/manage/failure-logs", label: "Failure Logs", icon: AlertTriangle },
-  { href: "/manage/users", label: "Users", icon: Settings },
+  { href: "/manage/users", label: "Users", icon: Users },
   { href: "/manage/transactions", label: "Transactions", icon: CreditCard },
   { href: "/manage/otp-logs", label: "OTP Logs", icon: History },
   { href: "/manage/logs", label: "Admin Logs", icon: Shield },
-  { href: "/manage/settings", label: "Settings", icon: Settings },
+  { href: "/manage/settings", label: "Payment & Settings", icon: Settings },
 ];
 
 export function DashboardShell({
@@ -48,7 +49,6 @@ export function DashboardShell({
 }: {
   children: ReactNode;
 }): ReactElement {
-  const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [adminMobileOpen, setAdminMobileOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -70,18 +70,30 @@ export function DashboardShell({
     })();
   }, [hydrated]);
 
+  function isPublicDashboardRoute(path: string): boolean {
+    const clean = (path || "").replace(/\/+$/, "") || "/";
+    return clean === "/numbers" || clean === "/services";
+  }
+
   useEffect(() => {
     if (!hydrated || !sessionReady) return;
+    const isPublic = isPublicDashboardRoute(pathname);
     if (!useAuthStore.getState().token) {
-      router.replace("/login");
+      if (!isPublic) {
+        const redirectParam =
+          pathname && pathname !== "/"
+            ? `?redirect=${encodeURIComponent(pathname)}`
+            : "";
+        router.replace(`/login${redirectParam}`);
+      }
       return;
     }
 
     const currentUser = useAuthStore.getState().user;
     if (!currentUser) return;
 
-    // Strict boundary: Admin can ONLY access /manage routes
-    if (currentUser.role === "ADMIN" && !pathname.startsWith("/manage")) {
+    // Strict boundary: Admin can access /manage routes and preview /deposit
+    if (currentUser.role === "ADMIN" && !pathname.startsWith("/manage") && pathname !== "/deposit") {
       router.replace("/manage");
       return;
     }
@@ -152,7 +164,9 @@ export function DashboardShell({
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
-  if (!hydrated || !sessionReady || !token || !user) {
+  const isPublic = isPublicDashboardRoute(pathname);
+
+  if (!hydrated || !sessionReady || (!isPublic && (!token || !user))) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4">
         <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
@@ -164,10 +178,10 @@ export function DashboardShell({
   }
 
   const isAdminRoute = pathname.startsWith("/manage");
-  const isAdminUser = user.role === "ADMIN";
+  const isAdminUser = Boolean(user && user.role === "ADMIN");
 
   // Prevent flash of unauthorized UI while redirecting
-  if (isAdminUser && !isAdminRoute) {
+  if (isAdminUser && !isAdminRoute && pathname !== "/deposit") {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4">
         <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
@@ -196,10 +210,10 @@ export function DashboardShell({
       ? "-"
       : `${dualBalance.usd} (${dualBalance.pkr})`;
 
-  const balanceLoading = balancePkr === null || ownerUserId !== user.id;
+  const balanceLoading = balancePkr === null || ownerUserId !== user?.id;
 
   /* Admin layout: dedicated sidebar + mobile header, strictly for ADMIN accounts */
-  if (isAdminUser) {
+  if (isAdminUser && user) {
     return (
       <div className="flex min-h-screen w-full max-w-[100vw] flex-col md:flex-row overflow-x-hidden">
         <PremiumSidebarShell
@@ -211,7 +225,7 @@ export function DashboardShell({
           showWallet={false}
           balanceLabel={balanceLabel}
           balanceLoading={balanceLoading}
-          onAddBalance={() => setShowRechargeModal(true)}
+          onAddBalance={() => router.push("/deposit")}
           user={user}
           profileHref="/manage/settings"
           profileActive={pathname.startsWith("/manage/settings")}
@@ -291,16 +305,10 @@ export function DashboardShell({
         )}
 
         <div className="flex min-w-0 w-full flex-1 flex-col md:pl-[280px]">
-          <main className={cn("min-w-0 w-full max-w-full flex-1 p-4 sm:p-6 md:p-8")}>
+          <main className={cn("min-w-0 w-full max-w-full flex-1 p-4 sm:p-6 pb-6 sm:pb-8")}>
             {children}
           </main>
         </div>
-        <RechargePopup
-          open={showRechargeModal}
-          onOpenChange={setShowRechargeModal}
-          showMinimumMessage={true}
-          description="A minimum recharge of Rs 500 is required."
-        />
       </div>
     );
   }
@@ -316,18 +324,12 @@ export function DashboardShell({
         balanceLabel={balanceLabel}
         balancePkr={balancePkr}
         balanceLoading={balanceLoading}
-        onAddBalance={() => setShowRechargeModal(true)}
+        onAddBalance={() => router.push("/deposit")}
       />
-      <main className="top-nav-layout min-w-0 w-full max-w-full flex-1 px-4 sm:px-6 md:px-8 pb-10 sm:pb-16">
+      <main className="top-nav-layout min-w-0 w-full max-w-full flex-1 px-4 sm:px-6 md:px-8 pb-4 sm:pb-6">
         {children}
       </main>
       {isDashboard && <DashboardFooter />}
-      <RechargePopup
-        open={showRechargeModal}
-        onOpenChange={setShowRechargeModal}
-        showMinimumMessage={true}
-        description="A minimum recharge of Rs 500 is required."
-      />
     </div>
   );
 }

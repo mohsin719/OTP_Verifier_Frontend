@@ -19,18 +19,55 @@ export default function AuthCallbackPage() {
       syncExecutedRef.current = true;
 
       try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error || !data?.session) {
-          toast.error("Google authentication failed. Please try again.");
-          router.push("/login");
+        const url = typeof window !== "undefined" ? new URL(window.location.href) : null;
+        const code = url?.searchParams.get("code");
+        const type = url?.searchParams.get("type");
+        const errorParam = url?.searchParams.get("error");
+        const errorDescription = url?.searchParams.get("error_description");
+
+        if (errorParam || errorDescription) {
+          toast.error(errorDescription || errorParam || "Authentication error occurred.");
+          router.replace("/login");
           return;
         }
 
-        const sessionUser = data.session.user;
+        let sessionUser = null;
+
+        // 1. If PKCE code is in URL, exchange it for session
+        if (code) {
+          const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            console.error("Supabase code exchange error:", exchangeError);
+          } else if (exchangeData?.session) {
+            sessionUser = exchangeData.session.user;
+          }
+        }
+
+        // 2. Fallback to getSession() (for implicit/hash or already exchanged session)
+        if (!sessionUser) {
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          if (!sessionError && sessionData?.session) {
+            sessionUser = sessionData.session.user;
+          }
+        }
+
+        if (!sessionUser) {
+          toast.error("Google authentication failed or expired. Please try again.");
+          router.replace("/login");
+          return;
+        }
+
+        // If this callback was triggered from a password reset email:
+        if (type === "recovery") {
+          toast.success("Identity verified. Please set your new password.");
+          router.replace("/reset-password");
+          return;
+        }
+
         const email = sessionUser.email;
         if (!email) {
           toast.error("Email not provided by Google account.");
-          router.push("/login");
+          router.replace("/login");
           return;
         }
 
@@ -43,22 +80,34 @@ export default function AuthCallbackPage() {
         const result = await authGoogleSync({ email, username });
         if (!result.success) {
           toast.error(result.error || "Failed to initialize backend session.");
-          router.push("/login");
+          router.replace("/login");
           return;
         }
 
         setAuth(result.data.accessToken, result.data.user);
         const isRoleAdmin = result.data.user?.role === "ADMIN";
+        const storedRedirect =
+          typeof window !== "undefined"
+            ? sessionStorage.getItem("auth_redirect")
+            : null;
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("auth_redirect");
+        }
+        const destination = isRoleAdmin
+          ? "/manage"
+          : (storedRedirect && storedRedirect.startsWith("/") ? storedRedirect : "/dashboard");
+
         toast.success(
           isRoleAdmin
             ? "Welcome Admin! Redirecting to admin panel..."
             : "Welcome! Logged in with Google."
         );
-        router.push(isRoleAdmin ? "/manage" : "/dashboard");
+        router.push(destination);
         router.refresh();
-      } catch {
+      } catch (err) {
+        console.error("Auth callback exception:", err);
         toast.error("An error occurred during authentication.");
-        router.push("/login");
+        router.replace("/login");
       }
     }
 

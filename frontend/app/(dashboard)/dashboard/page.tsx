@@ -76,7 +76,7 @@ export default function DashboardPage(): React.ReactElement {
   const hasBalance = balancePkr !== null && !isLoading && ownerUserId === user?.id;
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 pb-10 pt-2 sm:pt-4">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 pb-4 pt-2 sm:pt-4">
       {/* ─── Hero Banner with Modern Royal Blue Aesthetic ─── */}
       <div className="relative overflow-hidden rounded-[26px] border border-blue-600/30 bg-gradient-to-br from-[#1d4ed8] via-[#1e40af] to-[#1e3a8a] p-6 sm:p-8 text-white shadow-xl shadow-blue-950/20">
         {/* Ambient Glows */}

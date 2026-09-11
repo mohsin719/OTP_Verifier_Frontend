@@ -58,13 +58,17 @@ type PlatformStatusResponse = {
   };
 };
 
-type PlatformFilter = "ALL" | "Facebook" | "Walmart" | "Others";
+type PlatformFilter = "ALL" | "Telegram" | "WhatsApp" | "Google" | "Facebook" | "Walmart" | "OpenAI" | "Others";
 type StatusFilter = "ALL" | "READY" | "COOLDOWN" | "BLOCKED" | "POOL_BUSY";
 
 const PLATFORM_FILTERS: { value: PlatformFilter; label: string }[] = [
   { value: "ALL", label: "All" },
+  { value: "Telegram", label: "Telegram" },
+  { value: "WhatsApp", label: "WhatsApp" },
+  { value: "Google", label: "Google" },
   { value: "Facebook", label: "Facebook" },
   { value: "Walmart", label: "Walmart" },
+  { value: "OpenAI", label: "OpenAI" },
   { value: "Others", label: "Others" },
 ];
 
@@ -81,9 +85,13 @@ const STATUS_FILTERS: {
 ];
 
 const PLATFORM_STYLES: Record<string, string> = {
-  Facebook: "border-blue-500/30 bg-blue-500/10 text-blue-300",
-  Walmart: "border-orange-500/30 bg-orange-500/10 text-orange-300",
-  Others: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+  Facebook: "border-blue-500/30 bg-blue-500/10 text-blue-400",
+  Telegram: "border-sky-500/30 bg-sky-500/10 text-sky-400",
+  WhatsApp: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+  Google: "border-red-500/30 bg-red-500/10 text-red-400",
+  Walmart: "border-orange-500/30 bg-orange-500/10 text-orange-400",
+  OpenAI: "border-teal-500/30 bg-teal-500/10 text-teal-400",
+  Others: "border-purple-500/30 bg-purple-500/10 text-purple-400",
 };
 
 const EFFECTIVE_STATUS_STYLES: Record<string, string> = {

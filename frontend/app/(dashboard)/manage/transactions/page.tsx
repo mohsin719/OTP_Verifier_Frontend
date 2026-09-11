@@ -80,9 +80,13 @@ const TX_TYPE_VISUAL: Record<
 };
 
 const PLATFORM_CHIP: Record<string, string> = {
-  Facebook: "bg-blue-500/15 text-blue-300 border-blue-500/25",
-  Walmart: "bg-orange-500/15 text-orange-300 border-orange-500/25",
-  Others: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
+  Facebook: "bg-blue-500/15 text-blue-500 border-blue-500/25",
+  Telegram: "bg-sky-500/15 text-sky-500 border-sky-500/25",
+  WhatsApp: "bg-emerald-500/15 text-emerald-500 border-emerald-500/25",
+  Google: "bg-red-500/15 text-red-500 border-red-500/25",
+  Walmart: "bg-orange-500/15 text-orange-500 border-orange-500/25",
+  OpenAI: "bg-teal-500/15 text-teal-500 border-teal-500/25",
+  Others: "bg-purple-500/15 text-purple-500 border-purple-500/25",
 };
 
 function formatDateTime(iso: string): string {

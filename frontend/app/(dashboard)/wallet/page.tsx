@@ -20,10 +20,10 @@ import {
   WifiOff,
   type LucideIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RechargePopup } from "@/components/dialogs/recharge-popup";
 import { AddBalanceHub } from "@/components/wallet/add-balance-hub";
 import { useApi } from "@/hooks/use-api";
 import { useAuthStore } from "@/stores/auth-store";
@@ -189,7 +189,6 @@ function TxDescriptionCell({
 export default function WalletPage(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const { balancePkr, isLoading, setBalance, ownerUserId } = useWalletStore();
-  const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [activeWalletTab, setActiveWalletTab] = useState<"deposit" | "history">("deposit");
   const [page, setPage] = useState(1);
   const [limit] = useState(15);
@@ -248,7 +247,7 @@ export default function WalletPage(): React.ReactElement {
   };
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 pb-12 pt-2 sm:pt-4">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 pb-4 pt-2 sm:pt-4">
       {/* ─── Top Header with Balance & Action CTA ─── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-2 border-b border-slate-100">
         <div>
@@ -266,12 +265,13 @@ export default function WalletPage(): React.ReactElement {
 
         <div className="flex flex-wrap items-center gap-2.5">
           <Button
-            type="button"
-            onClick={() => setActiveWalletTab("deposit")}
+            asChild
             className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold shadow-sm hover:shadow-md transition-all gap-1.5 rounded-xl h-9.5 px-4 cursor-pointer"
           >
-            <Plus className="h-4 w-4 stroke-[3]" />
-            <span>Deposit Funds</span>
+            <Link href="/deposit">
+              <Plus className="h-4 w-4 stroke-[3]" />
+              <span>Deposit Funds</span>
+            </Link>
           </Button>
 
           <Button
@@ -307,13 +307,12 @@ export default function WalletPage(): React.ReactElement {
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Available Balance
               </span>
-              <button
-                type="button"
-                onClick={() => setShowRechargeModal(true)}
+              <Link
+                href="/deposit"
                 className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
               >
                 + Add
-              </button>
+              </Link>
             </div>
             {balancePkr === null || isLoading || ownerUserId !== user?.id ? (
               <Skeleton className="mt-2 h-8 w-32" />
@@ -679,12 +678,11 @@ export default function WalletPage(): React.ReactElement {
                     Add balance or lease a number from the Services tab to see transactions here.
                   </p>
                   <Button
-                    type="button"
-                    onClick={() => setShowRechargeModal(true)}
+                    asChild
                     size="sm"
                     className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold"
                   >
-                    Add Balance Now
+                    <Link href="/deposit">Add Balance Now</Link>
                   </Button>
                 </div>
               ) : null}
@@ -753,14 +751,6 @@ export default function WalletPage(): React.ReactElement {
         </CardContent>
       </Card>
       )}
-
-      {/* ─── Direct Recharge Modal from Wallet Page ─── */}
-      <RechargePopup
-        open={showRechargeModal}
-        onOpenChange={setShowRechargeModal}
-        showMinimumMessage={true}
-        description="A minimum recharge of Rs 500 is required."
-      />
     </div>
   );
 }

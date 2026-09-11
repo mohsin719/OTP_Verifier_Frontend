@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Mail, ArrowLeft, Loader2 } from "lucide-react";
+import { Mail, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,62 +14,90 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { supabase } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
 
 export default function ForgotPasswordPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) return;
+
     setPending(true);
-    const res = await apiFetch<void>("/api/auth/forgot-password/request", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    });
-    setPending(false);
+    try {
+      // 1. Verify if the email is already registered in the system
+      const checkRes = await apiFetch<{ exists: boolean }>("/api/auth/check-email", {
+        method: "POST",
+        body: JSON.stringify({ email: trimmedEmail }),
+      });
 
-    if (!res.success) {
-      toast.error(res.error);
-      return;
+      if (!checkRes.success || !checkRes.data?.exists) {
+        toast.error("This email is not registered in our system. Please register first.");
+        setPending(false);
+        return;
+      }
+
+      // 2. If registered, proceed to send the Supabase recovery email
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://www.usnumhub.com";
+      const callbackUrl = `${origin}/auth/callback?type=recovery`;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo: callbackUrl,
+      });
+
+      if (error) {
+        toast.error(error.message || "Failed to send reset email.");
+        return;
+      }
+
+      setSent(true);
+      toast.success("Password recovery link sent! Check your inbox.");
+    } catch {
+      toast.error("An error occurred while sending reset email.");
+    } finally {
+      setPending(false);
     }
-
-    setSent(true);
-    toast.success("If that email is registered, a code has been sent. Check your inbox or spam folder.");
-
-    // Store email in sessionStorage for the verify page
-    sessionStorage.setItem("pwd_reset_email", email);
-
-    setTimeout(() => {
-      router.push("/forgot-password/verify");
-    }, 1500);
   }
 
   return (
-    <div className="flex min-h-screen w-full min-w-0 items-center justify-center overflow-x-hidden p-4">
-      <Card className="w-full max-w-md border-border/80">
+    <div className="flex min-h-screen w-full min-w-0 items-center justify-center overflow-x-hidden p-4 bg-slate-50">
+      <Card className="w-full max-w-md border-slate-200/90 shadow-md">
         <CardHeader>
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/30">
-            <Mail className="h-6 w-6 text-primary" />
+          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 ring-1 ring-blue-200">
+            <Mail className="h-6 w-6 text-blue-600" />
           </div>
-          <CardTitle>Forgot password</CardTitle>
+          <CardTitle className="text-xl font-bold">Forgot Password</CardTitle>
           <CardDescription>
-            Enter your registered email address and we&apos;ll send you a
-            6-digit verification code.
+            Enter your registered email address and we&apos;ll send you a password recovery link via Supabase.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {sent ? (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-500/15 ring-1 ring-green-500/30">
-                <Mail className="h-7 w-7 text-green-500" />
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 ring-1 ring-emerald-200">
+                <CheckCircle2 className="h-7 w-7 text-emerald-600" />
               </div>
-              <p className="font-medium">Code sent!</p>
-              <p className="text-sm text-muted-foreground">
-                Redirecting to verification…
-              </p>
+              <div>
+                <p className="font-bold text-slate-900">Recovery Link Sent!</p>
+                <p className="text-sm text-slate-600 mt-1">
+                  We sent a confirmation email to <strong className="text-slate-900">{email}</strong>.
+                </p>
+                <p className="text-xs text-slate-500 mt-2">
+                  Please check your inbox or spam folder and click the link to set your new password.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 text-xs"
+                onClick={() => setSent(false)}
+              >
+                Send to another email
+              </Button>
             </div>
           ) : (
             <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
@@ -86,21 +113,21 @@ export default function ForgotPasswordPage() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={pending}>
+              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 font-bold" disabled={pending}>
                 {pending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending code…
+                    Sending Recovery Link…
                   </>
                 ) : (
-                  "Send verification code"
+                  "Send Recovery Link"
                 )}
               </Button>
             </form>
           )}
-          <p className="mt-4 flex items-center justify-center gap-1 text-center text-sm text-muted-foreground">
-            <ArrowLeft className="h-3 w-3" />
-            <Link href="/login" prefetch={false} className="text-primary underline">
+          <p className="mt-4 flex items-center justify-center gap-1 text-center text-sm text-slate-500">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <Link href="/login" prefetch={false} className="text-blue-600 font-semibold hover:underline">
               Back to login
             </Link>
           </p>
@@ -109,3 +136,4 @@ export default function ForgotPasswordPage() {
     </div>
   );
 }
+

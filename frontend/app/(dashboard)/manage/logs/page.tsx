@@ -21,7 +21,15 @@ type AdminLogRow = {
   createdAt: string;
 };
 
-const ACTION_FILTERS = ["ALL", "balance_adjust", "balance_transfer"];
+const ACTION_FILTERS = [
+  "ALL",
+  "balance_adjust",
+  "balance_transfer",
+  "self_topup",
+  "ban",
+  "unban",
+  "number_sync",
+];
 
 export default function AdminLogsPage(): React.ReactElement {
   const token = useAuthStore((s) => s.token);
@@ -87,18 +95,22 @@ export default function AdminLogsPage(): React.ReactElement {
 
   const getActionBadge = (action: string) => {
     const colors: Record<string, string> = {
-      ban: "bg-red-500/10 text-red-500",
-      unban: "bg-green-500/10 text-green-500",
-      balance_adjust: "bg-blue-500/10 text-blue-500",
-      otp_actions: "bg-purple-500/10 text-purple-500",
+      ban: "bg-red-500/15 text-red-600 border border-red-200",
+      unban: "bg-emerald-500/15 text-emerald-600 border border-emerald-200",
+      balance_adjust: "bg-blue-500/15 text-blue-600 border border-blue-200",
+      balance_transfer: "bg-indigo-500/15 text-indigo-600 border border-indigo-200",
+      self_topup: "bg-amber-500/15 text-amber-600 border border-amber-200",
+      number_sync: "bg-teal-500/15 text-teal-600 border border-teal-200",
+      stats_refresh: "bg-slate-500/15 text-slate-600 border border-slate-200",
+      otp_actions: "bg-purple-500/15 text-purple-600 border border-purple-200",
     };
     return (
       <span
-        className={`inline-flex rounded-full px-2 py-1 text-xs ${
-          colors[action] || "bg-gray-500/10 text-gray-500"
+        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+          colors[action] || "bg-gray-500/10 text-gray-600 border border-gray-200"
         }`}
       >
-        {action}
+        {action.replace(/_/g, " ")}
       </span>
     );
   };

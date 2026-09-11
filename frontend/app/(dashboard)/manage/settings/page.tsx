@@ -15,181 +15,128 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
+import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth-store";
 
-type Step = "idle" | "otp-sent" | "done";
-type ServiceTariffs = {
-  facebook: number;
-  walmart: number;
-  others: number;
-};
-
-const TARIFF_DEFAULTS: ServiceTariffs = {
-  facebook: 30,
-  walmart: 60,
-  others: 60,
-};
+import {
+  getStoredPaymentSettings,
+  saveStoredPaymentSettings,
+  resetStoredPaymentSettings,
+  type StoredPaymentSettings,
+} from "@/lib/payment-methods";
+import {
+  CreditCard,
+  ExternalLink,
+  MessageCircle,
+  RotateCcw,
+  Save,
+  Smartphone,
+  Wallet,
+} from "lucide-react";
+import { SiBinance, SiTether } from "react-icons/si";
 
 export default function AdminSettingsPage() {
   const { token, user } = useAuthStore();
-  const [step, setStep] = useState<Step>("idle");
-  const [otp, setOtp] = useState("");
+
+  // Change password state (Old Password + New Password + Confirm Password)
+  const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [tariffs, setTariffs] = useState<ServiceTariffs>(TARIFF_DEFAULTS);
-  const [tariffInputs, setTariffInputs] = useState<Record<keyof ServiceTariffs, string>>({
-    facebook: "30",
-    walmart: "60",
-    others: "60",
-  });
-  const [loadingTariffs, setLoadingTariffs] = useState(false);
-  const [savingTariffs, setSavingTariffs] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  // Payment settings state
+  const [paymentConfig, setPaymentConfig] = useState<StoredPaymentSettings>(() => getStoredPaymentSettings());
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
-    let mounted = true;
-    setLoadingTariffs(true);
-    void apiFetch<ServiceTariffs>("/api/manage/service-tariffs", {
-      accessToken: token,
-      disableDedupe: true,
-      cacheTtlMs: 0,
-    })
-      .then((res) => {
-        if (!mounted || !res.success) {
-          if (mounted && !res.success) {
-            toast.error(res.error);
-          }
-          return;
-        }
-        const nextTariffs: ServiceTariffs = {
-          facebook: Number(res.data.facebook ?? 30),
-          walmart: Number((res.data as any).walmart ?? 60), // Graceful fallback
-          others: Number(res.data.others ?? 60),
-        };
-        setTariffs(nextTariffs);
-        setTariffInputs({
-          facebook: String(nextTariffs.facebook),
-          walmart: String(nextTariffs.walmart),
-          others: String(nextTariffs.others),
-        });
-      })
-      .finally(() => {
-        if (mounted) {
-          setLoadingTariffs(false);
-        }
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [token]);
+    setPaymentConfig(getStoredPaymentSettings());
+  }, []);
 
-  function updateTariffInput(key: keyof ServiceTariffs, value: string): void {
-    setTariffInputs((prev) => ({
-      ...prev,
-      [key]: value.replace(/[^\d]/g, ""),
-    }));
+  function handleUpdatePaymentField<K extends keyof StoredPaymentSettings>(
+    field: K,
+    value: StoredPaymentSettings[K]
+  ) {
+    setPaymentConfig((prev) => ({ ...prev, [field]: value }));
   }
 
-  async function handleSaveTariffs(e: FormEvent<HTMLFormElement>): Promise<void> {
+  function handleSavePaymentSettings(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setIsSavingPayment(true);
+    try {
+      saveStoredPaymentSettings(paymentConfig);
+      toast.success("Payment methods & WhatsApp settings saved successfully!");
+    } catch {
+      toast.error("Failed to save payment settings.");
+    } finally {
+      setIsSavingPayment(false);
+    }
+  }
+
+  function handleResetPaymentSettings() {
+    if (!window.confirm("Are you sure you want to reset all payment details to system defaults?")) return;
+    const defaults = resetStoredPaymentSettings();
+    setPaymentConfig(defaults);
+    toast.success("Payment methods reset to system defaults.");
+  }
+
+  async function handleChangePassword(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     if (!token) return;
 
-    const payload = {
-      facebook: Number(tariffInputs.facebook),
-      walmart: Number(tariffInputs.walmart),
-      others: Number(tariffInputs.others),
-    };
-
-    const invalid = Object.entries(payload).find(([, amount]) => !Number.isInteger(amount) || amount < 0 || amount > 500000);
-    if (invalid) {
-      toast.error("Each price must be an integer between 0 and 500000.");
-      return;
-    }
-
-    setSavingTariffs(true);
-    const res = await apiFetch<ServiceTariffs>("/api/manage/service-tariffs", {
-      method: "PATCH",
-      accessToken: token,
-      body: JSON.stringify(payload),
-    });
-    setSavingTariffs(false);
-
-    if (!res.success) {
-      toast.error(res.error);
-      return;
-    }
-
-    const saved: ServiceTariffs = {
-      facebook: Number(res.data.facebook ?? payload.facebook),
-      walmart: Number((res.data as any).walmart ?? payload.walmart),
-      others: Number(res.data.others ?? payload.others),
-    };
-    setTariffs(saved);
-    setTariffInputs({
-      facebook: String(saved.facebook),
-      walmart: String(saved.walmart),
-      others: String(saved.others),
-    });
-    toast.success("OTP service prices updated.");
-  }
-
-  async function handleSendOtp(): Promise<void> {
-    if (!token) return;
-    setSendingOtp(true);
-    const res = await apiFetch<void>("/api/manage/change-password/request-otp", {
-      method: "POST",
-      accessToken: token,
-    });
-    setSendingOtp(false);
-
-    if (!res.success) {
-      toast.error(res.error);
-      return;
-    }
-
-    setStep("otp-sent");
-    toast.success(`Verification code sent to ${user?.email ?? "your email"}.`);
-  }
-
-  async function onConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault();
-
-    if (newPassword !== confirmPassword) {
-      toast.error("Passwords do not match.");
+    if (!oldPassword) {
+      toast.error("Please enter your current (old) password.");
       return;
     }
     if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters.");
+      toast.error("New password must be at least 8 characters.");
+      return;
+    }
+    if (oldPassword === newPassword) {
+      toast.error("New password cannot be the same as your current password.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("New passwords do not match.");
       return;
     }
 
-    if (!token) return;
-    setConfirming(true);
-    const res = await apiFetch<void>("/api/manage/change-password/confirm", {
-      method: "POST",
-      accessToken: token,
-      body: JSON.stringify({ otp, newPassword }),
-    });
-    setConfirming(false);
+    setChangingPassword(true);
+    try {
+      const res = await apiFetch<void>("/api/auth/change-password", {
+        method: "POST",
+        accessToken: token,
+        body: JSON.stringify({ currentPassword: oldPassword, newPassword }),
+      });
 
-    if (!res.success) {
-      toast.error(res.error);
-      return;
+      if (!res.success) {
+        toast.error(res.error || "Failed to change password. Please check your old password.");
+        return;
+      }
+
+      // Also keep Supabase Auth in sync if session exists
+      try {
+        await supabase.auth.updateUser({ password: newPassword });
+      } catch {
+        // Non-blocking
+      }
+
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Admin password changed successfully!");
+    } catch {
+      toast.error("A network or server error occurred. Please try again.");
+    } finally {
+      setChangingPassword(false);
     }
-
-    setStep("done");
-    toast.success("Password changed successfully!");
   }
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-2xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-4xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Admin Settings</h1>
         <p className="text-muted-foreground">
-          Manage your admin account security settings.
+          Manage system payment methods, admin account credentials, and platform security.
         </p>
       </div>
 
@@ -198,7 +145,7 @@ export default function AdminSettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            Account information
+            Account Information
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
@@ -219,74 +166,305 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/[0.03] to-transparent">
+      {/* Payment Methods & Deposit Configuration */}
+      <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/[0.02] to-transparent shadow-sm">
         <CardHeader>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                OTP Service Pricing & Profit Margins
+              <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-900">
+                <CreditCard className="h-5 w-5 text-blue-600" />
+                Payment Methods &amp; Deposit Configuration
               </CardTitle>
               <CardDescription>
-                Quick default rates below, or open the full catalog to manage 100+ services with carrier costs &amp; margin formulas.
+                Configure the payment receiving accounts and WhatsApp support number shown to users on the Deposit page.
               </CardDescription>
             </div>
-            <Button asChild variant="outline" size="sm" className="border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0">
-              <a href="/manage/services">
-                Open Full Pricing Engine →
-              </a>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="outline" size="sm" className="border-slate-200 gap-1.5 text-slate-700 hover:bg-slate-50">
+                <a href="/deposit" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Preview Deposit Page
+                </a>
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <form onSubmit={(e) => void handleSaveTariffs(e)} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="price-facebook">Facebook (Rs)</Label>
-                <Input
-                  id="price-facebook"
-                  inputMode="numeric"
-                  value={tariffInputs.facebook}
-                  onChange={(ev) => updateTariffInput("facebook", ev.target.value)}
-                  disabled={loadingTariffs || savingTariffs}
-                  required
-                />
+          <form onSubmit={handleSavePaymentSettings} className="space-y-6">
+            {/* 1. Admin WhatsApp Support */}
+            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/30 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                  <MessageCircle className="h-4 w-4 text-emerald-600" />
+                  <span>Admin Support &amp; Deposit Proof WhatsApp</span>
+                </div>
+                {paymentConfig.adminWhatsapp && (
+                  <a
+                    href={`https://wa.me/${paymentConfig.adminWhatsapp.replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1"
+                  >
+                    <span>Test WhatsApp Link</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="price-walmart">Walmart (Rs)</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-whatsapp" className="text-xs font-semibold text-slate-700">
+                  WhatsApp Number (with country code, e.g. +923233371766)
+                </Label>
                 <Input
-                  id="price-walmart"
-                  inputMode="numeric"
-                  value={tariffInputs.walmart}
-                  onChange={(ev) => updateTariffInput("walmart", ev.target.value)}
-                  disabled={loadingTariffs || savingTariffs}
+                  id="admin-whatsapp"
+                  type="text"
+                  value={paymentConfig.adminWhatsapp}
+                  onChange={(e) => handleUpdatePaymentField("adminWhatsapp", e.target.value)}
+                  placeholder="+923233371766"
                   required
+                  className="bg-white font-mono"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="price-others">Others/Default (Rs)</Label>
-                <Input
-                  id="price-others"
-                  inputMode="numeric"
-                  value={tariffInputs.others}
-                  onChange={(ev) => updateTariffInput("others", ev.target.value)}
-                  disabled={loadingTariffs || savingTariffs}
-                  required
-                />
+                <p className="text-[11px] text-slate-500">
+                  Users clicking &quot;Confirm on WhatsApp&quot; will be redirected directly to this number with pre-filled User ID, amount, and payment details.
+                </p>
               </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Live tariffs: FB Rs {tariffs.facebook}, Walmart Rs {tariffs.walmart}, Others Rs {tariffs.others}
-              </p>
-              <Button type="submit" disabled={loadingTariffs || savingTariffs}>
-                {savingTariffs ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving prices…
-                  </>
-                ) : (
-                  "Save OTP prices"
-                )}
+
+            {/* 2. Local PKR Wallets */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b pb-2">
+                <Smartphone className="h-4 w-4 text-primary" />
+                <h3 className="font-bold text-sm text-slate-900">Local Pakistani Wallets (PKR)</h3>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* JazzCash */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-red-600 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-red-600" />
+                      JazzCash
+                    </span>
+                    <span className="text-[10px] bg-red-50 text-red-700 border border-red-200 font-bold px-1.5 py-0.5 rounded">
+                      Local PKR
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="jazzcash-number" className="text-xs">Account / Mobile Number</Label>
+                    <Input
+                      id="jazzcash-number"
+                      value={paymentConfig.jazzcashNumber}
+                      onChange={(e) => handleUpdatePaymentField("jazzcashNumber", e.target.value)}
+                      placeholder="03233371766"
+                      required
+                      className="font-mono text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="jazzcash-title" className="text-xs">Account Title</Label>
+                    <Input
+                      id="jazzcash-title"
+                      value={paymentConfig.jazzcashTitle}
+                      onChange={(e) => handleUpdatePaymentField("jazzcashTitle", e.target.value)}
+                      placeholder="Account Title"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="jazzcash-min" className="text-xs">Minimum Deposit (PKR)</Label>
+                    <Input
+                      id="jazzcash-min"
+                      type="number"
+                      min={100}
+                      value={paymentConfig.jazzcashMinPkr}
+                      onChange={(e) => handleUpdatePaymentField("jazzcashMinPkr", parseInt(e.target.value) || 500)}
+                      placeholder="500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* EasyPaisa */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-emerald-600 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                      EasyPaisa
+                    </span>
+                    <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-1.5 py-0.5 rounded">
+                      Local PKR
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="easypaisa-number" className="text-xs">Account / Mobile Number</Label>
+                    <Input
+                      id="easypaisa-number"
+                      value={paymentConfig.easypaisaNumber}
+                      onChange={(e) => handleUpdatePaymentField("easypaisaNumber", e.target.value)}
+                      placeholder="03233371766"
+                      required
+                      className="font-mono text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="easypaisa-title" className="text-xs">Account Title</Label>
+                    <Input
+                      id="easypaisa-title"
+                      value={paymentConfig.easypaisaTitle}
+                      onChange={(e) => handleUpdatePaymentField("easypaisaTitle", e.target.value)}
+                      placeholder="Account Title"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="easypaisa-min" className="text-xs">Minimum Deposit (PKR)</Label>
+                    <Input
+                      id="easypaisa-min"
+                      type="number"
+                      min={100}
+                      value={paymentConfig.easypaisaMinPkr}
+                      onChange={(e) => handleUpdatePaymentField("easypaisaMinPkr", parseInt(e.target.value) || 500)}
+                      placeholder="500"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Cryptocurrency & Web3 (USD) */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b pb-2">
+                <Wallet className="h-4 w-4 text-primary" />
+                <h3 className="font-bold text-sm text-slate-900">Cryptocurrency Gateways (USD)</h3>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* Binance Pay */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                      <SiBinance className="h-4 w-4 text-[#F3BA2F]" />
+                      Binance Pay
+                    </span>
+                    <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 font-bold px-1.5 py-0.5 rounded">
+                      0% Fee • USD
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="binance-pay-id" className="text-xs">Binance Pay ID</Label>
+                    <Input
+                      id="binance-pay-id"
+                      value={paymentConfig.binancePayId}
+                      onChange={(e) => handleUpdatePaymentField("binancePayId", e.target.value)}
+                      placeholder="834910283"
+                      required
+                      className="font-mono text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="binance-pay-title" className="text-xs">Merchant / Account Title</Label>
+                    <Input
+                      id="binance-pay-title"
+                      value={paymentConfig.binancePayTitle}
+                      onChange={(e) => handleUpdatePaymentField("binancePayTitle", e.target.value)}
+                      placeholder="USNumHub Merchant"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="binance-min" className="text-xs">Minimum Deposit (USD)</Label>
+                    <Input
+                      id="binance-min"
+                      type="number"
+                      min={1}
+                      value={paymentConfig.binanceMinUsd}
+                      onChange={(e) => handleUpdatePaymentField("binanceMinUsd", parseInt(e.target.value) || 2)}
+                      placeholder="2"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* USDT TRC-20 */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-emerald-600 flex items-center gap-1.5">
+                      <SiTether className="h-4 w-4 text-emerald-500" />
+                      USDT (TRC-20)
+                    </span>
+                    <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-1.5 py-0.5 rounded">
+                      TRON Network
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="usdt-trc20-address" className="text-xs">TRC-20 Wallet Address</Label>
+                    <Input
+                      id="usdt-trc20-address"
+                      value={paymentConfig.usdtTrc20Address}
+                      onChange={(e) => handleUpdatePaymentField("usdtTrc20Address", e.target.value)}
+                      placeholder="TXbBq78pUQ9w8mKq18hZb1Ew8qZf3jPXYZ"
+                      required
+                      className="font-mono text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="usdt-trc20-title" className="text-xs">Network / Memo Title</Label>
+                    <Input
+                      id="usdt-trc20-title"
+                      value={paymentConfig.usdtTrc20Title}
+                      onChange={(e) => handleUpdatePaymentField("usdtTrc20Title", e.target.value)}
+                      placeholder="TRON Network"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="usdt-min" className="text-xs">Minimum Deposit (USD)</Label>
+                    <Input
+                      id="usdt-min"
+                      type="number"
+                      min={1}
+                      value={paymentConfig.usdtMinUsd}
+                      onChange={(e) => handleUpdatePaymentField("usdtMinUsd", parseInt(e.target.value) || 5)}
+                      placeholder="5"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleResetPaymentSettings}
+                className="text-slate-600 hover:text-red-600 gap-1.5 cursor-pointer w-full sm:w-auto"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset to Defaults
+              </Button>
+
+              <Button
+                type="submit"
+                disabled={isSavingPayment}
+                className="bg-blue-600 hover:bg-blue-700 text-white gap-2 cursor-pointer w-full sm:w-auto shadow-sm"
+              >
+                <Save className="h-4 w-4" />
+                {isSavingPayment ? "Saving Details…" : "Save Payment Settings"}
               </Button>
             </div>
           </form>
@@ -296,136 +474,68 @@ export default function AdminSettingsPage() {
 
 
       {/* Change Password */}
+      {/* Change Password */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-primary" />
-            Change password
+            Change Password
           </CardTitle>
           <CardDescription>
-            For security, a verification code will be sent to your admin email
-            before changing your password.
+            Enter your current old password, then choose and confirm your new password.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {step === "done" ? (
-            <div className="flex flex-col items-center gap-4 py-6 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/15 ring-1 ring-green-500/30">
-                <ShieldCheck className="h-8 w-8 text-green-500" />
-              </div>
-              <div>
-                <p className="font-semibold">Password changed successfully!</p>
-                <p className="text-sm text-muted-foreground">
-                  Your admin password has been updated.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setStep("idle");
-                  setOtp("");
-                  setNewPassword("");
-                  setConfirmPassword("");
-                }}
-              >
-                Change again
-              </Button>
+          <form onSubmit={(e) => void handleChangePassword(e)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="admin-old-password">Old / Current Password</Label>
+              <PasswordInput
+                id="admin-old-password"
+                autoComplete="current-password"
+                placeholder="Enter current password"
+                value={oldPassword}
+                onChange={(ev) => setOldPassword(ev.target.value)}
+                required
+              />
             </div>
-          ) : step === "idle" ? (
-            <div className="space-y-4">
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-primary" />
-                  <span>
-                    A 6-digit code will be sent to{" "}
-                    <strong className="text-foreground">{user?.email}</strong>
-                  </span>
-                </div>
-              </div>
-              <Button
-                id="send-otp-btn"
-                onClick={() => void handleSendOtp()}
-                disabled={sendingOtp}
-                className="w-full"
-              >
-                {sendingOtp ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending code…
-                  </>
-                ) : (
-                  "Send verification code to email"
-                )}
-              </Button>
+
+            <div className="space-y-2">
+              <Label htmlFor="admin-new-password">New Password</Label>
+              <PasswordInput
+                id="admin-new-password"
+                autoComplete="new-password"
+                placeholder="Min. 8 characters"
+                value={newPassword}
+                onChange={(ev) => setNewPassword(ev.target.value)}
+                required
+                minLength={8}
+              />
             </div>
-          ) : (
-            <form onSubmit={(e) => void onConfirm(e)} className="space-y-4">
-              <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3 text-sm text-muted-foreground">
-                Code sent to{" "}
-                <strong className="text-foreground">{user?.email}</strong>.
-                Check your inbox.
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="admin-otp">Verification code</Label>
-                <Input
-                  id="admin-otp"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  placeholder="123456"
-                  value={otp}
-                  onChange={(ev) => setOtp(ev.target.value.replace(/\D/g, ""))}
-                  required
-                  className="font-mono text-lg tracking-widest"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="admin-new-password">New password</Label>
-                <PasswordInput
-                  id="admin-new-password"
-                  autoComplete="new-password"
-                  placeholder="Min. 8 characters"
-                  value={newPassword}
-                  onChange={(ev) => setNewPassword(ev.target.value)}
-                  required
-                  minLength={8}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="admin-confirm-password">Confirm password</Label>
-                <PasswordInput
-                  id="admin-confirm-password"
-                  autoComplete="new-password"
-                  placeholder="Repeat password"
-                  value={confirmPassword}
-                  onChange={(ev) => setConfirmPassword(ev.target.value)}
-                  required
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setStep("idle")}
-                  disabled={confirming}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" className="flex-1" disabled={confirming}>
-                  {confirming ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Changing password…
-                    </>
-                  ) : (
-                    "Change password"
-                  )}
-                </Button>
-              </div>
-            </form>
-          )}
+
+            <div className="space-y-2">
+              <Label htmlFor="admin-confirm-password">Confirm New Password</Label>
+              <PasswordInput
+                id="admin-confirm-password"
+                autoComplete="new-password"
+                placeholder="Repeat new password"
+                value={confirmPassword}
+                onChange={(ev) => setConfirmPassword(ev.target.value)}
+                required
+                minLength={8}
+              />
+            </div>
+
+            <Button type="submit" disabled={changingPassword} className="w-full">
+              {changingPassword ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating Password…
+                </>
+              ) : (
+                "Update Password"
+              )}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

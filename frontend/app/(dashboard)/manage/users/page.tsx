@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import { useAuthStore } from "@/stores/auth-store";
+import { useCurrencyStore, pkrToUsd } from "@/lib/currency";
 import { Ban, RefreshCw, UserCheck, Users, UserX } from "lucide-react";
 
 type UserRow = {
@@ -55,6 +56,7 @@ function formatBalancePkr(amount: number): string {
 export default function AdminUsersPage(): React.ReactElement {
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
+  const { exchangeRate } = useCurrencyStore();
 
   const [page, setPage] = useState(1);
   const [limit] = useState(30);
@@ -487,8 +489,11 @@ export default function AdminUsersPage(): React.ReactElement {
                         <td className="py-2 pr-4 text-muted-foreground">{u.email}</td>
                         <td className="py-2 pr-4">{u.preferredPlatform || "—"}</td>
                         <td className="py-2 pr-4 tabular-nums">{u.whatsappAttemptCount ?? 0}</td>
-                        <td className="py-2 pr-4 font-medium tabular-nums whitespace-nowrap">
-                          {formatBalancePkr(u.balancePkr ?? 0)}
+                        <td className="py-2 pr-4 tabular-nums whitespace-nowrap">
+                          <div className="font-bold text-foreground">{formatBalancePkr(u.balancePkr ?? 0)}</div>
+                          <div className="text-[11px] font-semibold text-muted-foreground">
+                            ≈ ${pkrToUsd(u.balancePkr ?? 0, exchangeRate).toFixed(2)} USD
+                          </div>
                         </td>
                         <td className="py-2 pr-4">
                           {u.isBanned ? (

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo, startTransition, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import { Copy, Phone, RefreshCw, ShieldCheck, Clock, Wifi, Info, Sparkles, Check, AlertCircle, RotateCcw } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Copy, Phone, RefreshCw, ShieldCheck, Clock, Wifi, Info, Sparkles, Check, AlertCircle, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { io, type Socket } from "socket.io-client";
 import { Button } from "@/components/ui/button";
@@ -66,8 +66,8 @@ type SwapIssueOption = {
 };
 
 const LEASE_TTL_MINUTES = 10;
-/** Silent background sync while waiting for OTP — does not affect Refresh Status button. */
-const BACKGROUND_SYNC_INTERVAL_MS = 10_000;
+/** Silent background sync while waiting for OTP — fast 2s interval for instant arrival. */
+const BACKGROUND_SYNC_INTERVAL_MS = 2_000;
 const LEASE_EXPIRED_TOAST_ID = "lease-expired-toast";
 const SWAP_ISSUE_OPTIONS: SwapIssueOption[] = [
   {
@@ -138,6 +138,7 @@ function secondsUntil(isoStr: string): number {
 }
 
 function NumbersPageContent() {
+  const router = useRouter();
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
   const { balancePkr, ownerUserId } = useWalletStore();
@@ -160,6 +161,7 @@ function NumbersPageContent() {
     {
       cacheTtlMs: 30000,
       disableDedupe: false,
+      allowAnonymous: true,
     }
   );
 
@@ -243,7 +245,9 @@ function NumbersPageContent() {
     fetchedActive === undefined &&
     optimisticActive === null;
   const showInitialSkeleton =
-    !hasLoadedActiveOnceRef.current && ((isLoading && !rawActive) || awaitingActiveRevalidation);
+    Boolean(token)
+      ? (!hasLoadedActiveOnceRef.current && ((isLoading && !rawActive) || awaitingActiveRevalidation))
+      : Boolean(tariffLoading && !tariffPayload && !catalogService && !liveService);
   const fetchWalletBalance = useWalletStore((s) => s.fetchBalance);
 
   const syncWalletAfterRefund = useCallback(async () => {
@@ -530,8 +534,9 @@ function NumbersPageContent() {
   const openRechargePopup = useCallback((requiredPrice: number, description: string) => {
     setRechargeServicePrice(requiredPrice);
     setRechargeDescription(description);
-    setShowRechargePopup(true);
-  }, []);
+    toast.info(`Insufficient balance (${requiredPrice ? `Rs ${requiredPrice} required` : "Please top up"}). Redirecting to Add Balance page...`);
+    router.push(`/deposit?required=${requiredPrice}`);
+  }, [router]);
 
   useEffect(() => {
     if (!fetchedActive && rawActive && !hasReceivedOtp) {
@@ -620,18 +625,13 @@ function NumbersPageContent() {
       payload?: { otp?: string; phoneNumber?: string; otpRequestId?: string },
     ) => {
       const currentE164 = currentDisplayE164Ref.current;
-      const currentOtpRequestId = currentDisplayOtpRequestIdRef.current;
       const incomingOtp = payload?.otp;
-      if (!currentE164 || !currentOtpRequestId) {
+      if (!currentE164 || !incomingOtp || !payload?.phoneNumber) {
         return;
       }
-      if (!incomingOtp || !payload?.phoneNumber || !payload.otpRequestId) {
-        return;
-      }
-      if (payload.phoneNumber !== currentE164) {
-        return;
-      }
-      if (payload.otpRequestId !== currentOtpRequestId) {
+      const currentDigits = currentE164.replace(/\D/g, "");
+      const incomingDigits = payload.phoneNumber.replace(/\D/g, "");
+      if (!currentDigits || currentDigits !== incomingDigits) {
         return;
       }
       const incomingOtpSafe: string = incomingOtp;
@@ -708,7 +708,6 @@ function NumbersPageContent() {
       return;
     }
     const e164 = displayActiveSession.e164;
-    const otpRequestId = displayActiveSession.otpRequestId;
 
     const doPoll = async () => {
       // Cancel previous request if still pending
@@ -725,10 +724,9 @@ function NumbersPageContent() {
           cacheTtlMs: 0,
         });
         if (!controller.signal.aborted && res.success && res.data?.status === "received") {
-          if (
-            currentDisplayE164Ref.current !== e164 ||
-            currentDisplayOtpRequestIdRef.current !== otpRequestId
-          ) {
+          const currentDigits = currentDisplayE164Ref.current?.replace(/\D/g, "");
+          const pollDigits = e164.replace(/\D/g, "");
+          if (!currentDigits || currentDigits !== pollDigits) {
             return;
           }
           if (otpAnnouncedRef.current === e164) {
@@ -842,7 +840,18 @@ function NumbersPageContent() {
   );
 
   const acquire = useCallback(async () => {
-    if (!token) return;
+    if (!token) {
+      toast.info("Please sign in or register to get a virtual number.");
+      const currentUrl =
+        typeof window !== "undefined"
+          ? window.location.pathname + window.location.search
+          : "/numbers";
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("auth_redirect", currentUrl);
+      }
+      router.push(`/login?redirect=${encodeURIComponent(currentUrl)}`);
+      return;
+    }
     if (pricingUnavailable || (!liveService && !catalogService && (tariffLoading || !tariffPayload))) {
       toast.error("Pricing is temporarily unavailable. Please try again shortly.");
       return;
@@ -1169,7 +1178,7 @@ function NumbersPageContent() {
   const DisplayPlatformIcon = displayPlatformVisual.Icon;
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-6 pb-20">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-6 pb-4">
       {/* Header */}
       <div className="space-y-4">
         <div className="space-y-1.5">
@@ -1376,9 +1385,20 @@ function NumbersPageContent() {
                   </div>
                 )}
                 {showInitialSkeleton ? (
-                  <div className="space-y-2.5">
-                    <Skeleton className="h-16 w-full rounded-xl" />
-                    <Skeleton className="h-10 w-full rounded-xl" />
+                  <div className="py-8 sm:py-10 flex flex-col items-center justify-center text-center space-y-3.5">
+                    <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50/90 border border-blue-100 shadow-sm">
+                      <div className="absolute inset-0 rounded-2xl bg-blue-400/20 animate-ping opacity-25" />
+                      <Loader2 className="h-7 w-7 text-blue-600 animate-spin relative z-10" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-extrabold text-slate-900">Checking Virtual Line Pool…</p>
+                      <p className="text-xs text-slate-500 max-w-xs">
+                        Syncing real-time line availability and verification servers
+                      </p>
+                    </div>
+                    <div className="w-44 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full bg-blue-600 rounded-full animate-pulse w-3/4" />
+                    </div>
                   </div>
                 ) : displayActiveSession ? (
                   <>
@@ -1425,7 +1445,7 @@ function NumbersPageContent() {
                             size="icon"
                             variant="outline"
                             onClick={copyNumber}
-                            className="h-8 w-8 rounded-lg border-slate-200 bg-white hover:bg-slate-100 hover:border-blue-400 transition-colors cursor-pointer shadow-2xs"
+                            className="h-9 w-9 sm:h-8 sm:w-8 rounded-xl border-slate-200 bg-white hover:bg-slate-100 hover:border-blue-400 transition-colors cursor-pointer shadow-2xs flex items-center justify-center"
                             title="Copy number"
                           >
                             <Copy className="h-3.5 w-3.5 text-slate-700" />
@@ -1468,7 +1488,7 @@ function NumbersPageContent() {
                             size="sm"
                             variant="ghost"
                             onClick={copyOtp}
-                            className="h-6 shrink-0 px-2 text-[11px] font-bold gap-1 text-emerald-700 hover:bg-emerald-100/70"
+                            className="h-7 sm:h-6 shrink-0 px-2.5 sm:px-2 rounded-lg text-[11px] font-bold gap-1 text-emerald-700 hover:bg-emerald-100/70 cursor-pointer"
                           >
                             <Copy className="h-3 w-3" />
                             Copy OTP
@@ -1509,13 +1529,13 @@ function NumbersPageContent() {
                       )}
 
                     {isWaitingForOtp && (
-                      <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
+                      <div className="mt-2.5 grid grid-cols-2 gap-2 sm:flex sm:flex-row">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => !isCancelLocked && setShowCancelDialog(true)}
                           className={cn(
-                            "flex-1 h-9 gap-1.5 border font-bold transition-all text-xs",
+                            "min-h-[42px] sm:min-h-[38px] flex-1 px-2 sm:px-3 rounded-xl border font-bold transition-all text-xs flex items-center justify-center gap-1.5 min-w-0 cursor-pointer",
                             isCancelLocked
                               ? "border-amber-200/90 bg-amber-50/60 text-amber-800/80 cursor-not-allowed hover:bg-amber-50/60 hover:text-amber-800/80"
                               : "border-slate-200 text-slate-700 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
@@ -1529,18 +1549,18 @@ function NumbersPageContent() {
                         >
                           {isCancelLocked ? (
                             <>
-                              <Clock className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
-                              <span>Cancel in {formatTime(cancelLockRemaining)}</span>
+                              <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0 animate-pulse" />
+                              <span className="truncate">Cancel in {formatTime(cancelLockRemaining)}</span>
                             </>
                           ) : (
-                            "Cancel (Refund)"
+                            <span className="truncate">Cancel (Refund)</span>
                           )}
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setShowSwapConfirmDialog(true)}
-                          className="flex-1 h-9 gap-1.5 border-slate-200 font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors text-xs"
+                          className="min-h-[42px] sm:min-h-[38px] flex-1 px-2 sm:px-3 rounded-xl border-slate-200 font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors text-xs flex items-center justify-center gap-1.5 min-w-0 cursor-pointer"
                           disabled={
                             loadingChangeNumber ||
                             pricingUnavailable ||
@@ -1548,23 +1568,19 @@ function NumbersPageContent() {
                             !tariffPayload
                           }
                         >
-                          {loadingChangeNumber ? (
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          )}
-                          {loadingChangeNumber ? "Changing…" : "Change Number"}
+                          <RefreshCw className={cn("h-3.5 w-3.5 shrink-0", loadingChangeNumber && "animate-spin")} />
+                          <span className="truncate">{loadingChangeNumber ? "Changing…" : "Change Number"}</span>
                         </Button>
                       </div>
                     )}
 
                     {hasReceivedOtp && isLiveLease && !sessionComplete && (
-                      <div className="mt-3.5 flex flex-col gap-2 sm:flex-row">
+                      <div className="mt-3.5 grid grid-cols-2 gap-2 sm:flex sm:flex-row">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setHideCompletedSession(true)}
-                          className="flex-1 gap-1.5 border-slate-200 font-semibold text-xs"
+                          className="min-h-[42px] sm:min-h-[38px] flex-1 px-3 rounded-xl border-slate-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 min-w-0 cursor-pointer"
                           disabled={
                             loadingChangeNumber ||
                             pricingUnavailable ||
@@ -1572,13 +1588,13 @@ function NumbersPageContent() {
                             !tariffPayload
                           }
                         >
-                          Back
+                          <span className="truncate">Back</span>
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setShowPostOtpChangeDialog(true)}
-                          className="flex-1 gap-1.5 border-slate-200 font-semibold text-xs"
+                          className="min-h-[42px] sm:min-h-[38px] flex-1 px-3 rounded-xl border-blue-200 bg-blue-50/50 hover:bg-blue-100 font-bold text-blue-700 transition-colors text-xs sm:text-sm flex items-center justify-center gap-1.5 min-w-0 cursor-pointer"
                           disabled={
                             loadingChangeNumber ||
                             pricingUnavailable ||
@@ -1586,12 +1602,8 @@ function NumbersPageContent() {
                             !tariffPayload
                           }
                         >
-                          {loadingChangeNumber ? (
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          )}
-                          {loadingChangeNumber ? "Changing…" : "Change Number"}
+                          <RefreshCw className={cn("h-3.5 w-3.5 shrink-0", loadingChangeNumber && "animate-spin")} />
+                          <span className="truncate">{loadingChangeNumber ? "Changing…" : "Change Number"}</span>
                         </Button>
                       </div>
                     )}
@@ -1601,13 +1613,13 @@ function NumbersPageContent() {
                       variant="outline"
                       size="sm"
                       onClick={handleRefreshStatus}
-                      className="gap-2 w-full border-slate-200 bg-white hover:bg-slate-50 font-bold text-slate-700 shadow-2xs text-xs"
+                      className="min-h-[42px] sm:min-h-[38px] gap-2 w-full rounded-xl border-slate-200 bg-white hover:bg-slate-50 font-bold text-slate-700 shadow-2xs text-xs sm:text-sm flex items-center justify-center cursor-pointer"
                       disabled={loadingRefresh}
                     >
                       <RefreshCw
-                        className={`h-3.5 w-3.5 ${loadingRefresh ? "animate-spin" : ""}`}
+                        className={cn("h-3.5 w-3.5 shrink-0", loadingRefresh && "animate-spin")}
                       />
-                      {loadingRefresh ? "Refreshing..." : "Refresh Status"}
+                      <span>{loadingRefresh ? "Refreshing..." : "Refresh Status"}</span>
                     </Button>
 
                   </>
@@ -1653,17 +1665,21 @@ function NumbersPageContent() {
             </div>
 
             {/* Acquire Button pinned at bottom of card */}
-            {(!showInitialSkeleton &&
-              !isWaitingForOtp &&
-              (!displayActiveSession || sessionComplete || platformMismatch)) && (
+            {showInitialSkeleton ? (
+              <div className="p-4 sm:p-5 pt-0">
+                <div className="h-12 w-full rounded-xl bg-slate-100 animate-pulse flex items-center justify-center gap-2 text-xs font-semibold text-slate-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                  <span>Loading line options…</span>
+                </div>
+              </div>
+            ) : !isWaitingForOtp && (!displayActiveSession || sessionComplete || platformMismatch) ? (
               <div className="p-4 sm:p-5 pt-0">
                 <Button
                   onClick={() => void acquire()}
                   disabled={
                     pending ||
-                    pricingUnavailable ||
-                    tariffLoading ||
-                    !tariffPayload
+                    (Boolean(token) && pricingUnavailable) ||
+                    (Boolean(token) && !liveService && !catalogService && (tariffLoading || !tariffPayload))
                   }
                   className="w-full gap-2 font-black text-sm py-5 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md shadow-blue-600/20 active:scale-[0.98] transition-all relative overflow-hidden group cursor-pointer"
                   size="lg"
@@ -1684,13 +1700,15 @@ function NumbersPageContent() {
                             : `Switch to ${selectedServiceName}`
                           : sessionComplete
                             ? `Get New ${activeServiceName} Number • ${dualPrice.usd} (${dualPrice.pkr})`
-                            : `Get ${displayServiceName} Number • ${dualPrice.usd} (${dualPrice.pkr})`}
+                            : !token
+                              ? `Sign in to Get ${displayServiceName} Number • ${dualPrice.usd} (${dualPrice.pkr})`
+                              : `Get ${displayServiceName} Number • ${dualPrice.usd} (${dualPrice.pkr})`}
                       </span>
                     </>
                   )}
                 </Button>
               </div>
-            )}
+            ) : null}
           </Card>
         </div>
       </div>

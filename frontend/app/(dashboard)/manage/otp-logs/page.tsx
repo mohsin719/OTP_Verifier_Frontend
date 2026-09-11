@@ -68,15 +68,23 @@ const STATUS_FILTERS = [
 
 const PLATFORM_FILTERS = [
   { value: "ALL", label: "All platforms" },
+  { value: "telegram", label: "Telegram" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "google", label: "Google" },
   { value: "facebook", label: "Facebook" },
   { value: "walmart", label: "Walmart" },
+  { value: "openai", label: "OpenAI" },
   { value: "others", label: "Others" },
 ] as const;
 
 const PLATFORM_CHIP: Record<string, string> = {
-  Facebook: "bg-blue-500/15 text-blue-300 border-blue-500/30",
-  Walmart: "bg-orange-500/15 text-orange-300 border-orange-500/30",
-  Others: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  Facebook: "bg-blue-500/15 text-blue-500 border-blue-500/30",
+  Walmart: "bg-orange-500/15 text-orange-500 border-orange-500/30",
+  Telegram: "bg-sky-500/15 text-sky-500 border-sky-500/30",
+  WhatsApp: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
+  Google: "bg-red-500/15 text-red-500 border-red-500/30",
+  OpenAI: "bg-teal-500/15 text-teal-500 border-teal-500/30",
+  Others: "bg-purple-500/15 text-purple-500 border-purple-500/30",
 };
 
 function formatDateTime(iso: string): string {
@@ -334,7 +342,96 @@ export default function AdminOtpLogsPage(): React.ReactElement {
             <Skeleton className="h-64 w-full" />
           ) : !items ? null : (
             <>
-              <div className="overflow-x-auto">
+              {/* Mobile Card List View (Visible on < md) */}
+              <div className="space-y-2.5 md:hidden">
+                {items.map((row) => (
+                  <div
+                    key={row.id}
+                    className="rounded-xl border border-border/80 bg-card p-3 space-y-2 shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono text-xs font-bold text-foreground truncate">{row.userPublicId}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{row.email}</p>
+                      </div>
+                      <StatusBadge
+                        status={row.status}
+                        statusLabel={row.statusLabel}
+                        refunded={row.refunded}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/50 text-xs">
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono font-bold text-foreground">{row.phone}</span>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer"
+                          onClick={() => void copyText(row.phone)}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize",
+                          PLATFORM_CHIP[row.platform] ?? "border-border/50 bg-secondary/30",
+                        )}
+                      >
+                        {row.platform}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/50 text-xs">
+                      <div>
+                        <span className="text-[10px] text-muted-foreground block uppercase font-bold">Charge</span>
+                        <span className="text-amber-500 font-semibold">
+                          {row.priceAtRequestPkr != null ? `Rs ${row.priceAtRequestPkr}` : "—"}
+                        </span>
+                        {row.refunded && (
+                          <span className="text-[10px] text-emerald-500 font-bold ml-1">· Refunded</span>
+                        )}
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] text-muted-foreground block uppercase font-bold">OTP</span>
+                        {row.parsedOtp ? (
+                          <div className="flex items-center gap-1 justify-end">
+                            <span className="font-mono font-black text-emerald-500 text-sm">
+                              {row.parsedOtp}
+                            </span>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-emerald-500 hover:text-emerald-400 cursor-pointer"
+                              onClick={() => void copyText(row.parsedOtp!)}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : row.status === "PENDING" ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-500 font-semibold">
+                            <Clock className="h-3 w-3 animate-pulse" />
+                            Waiting
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-1 text-[10px] text-muted-foreground border-t border-border/40 text-right">
+                      {formatDateTime(row.createdAt)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View (Hidden on mobile < md, visible on md+) */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full min-w-[960px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">

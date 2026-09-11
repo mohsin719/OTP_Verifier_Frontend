@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { useApi } from "@/hooks/use-api";
 import { apiFetch } from "@/lib/api";
@@ -13,7 +14,7 @@ import {
   YAxis,
   CartesianGrid
 } from "recharts";
-import { ShieldAlert, Users, Activity, DollarSign, KeyRound, RefreshCw } from "lucide-react";
+import { ShieldAlert, Users, Activity, DollarSign, KeyRound, RefreshCw, Layers, Settings, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -170,22 +171,74 @@ export default function AdminDashboardPage() {
         <Card className="border-border/50 shadow-sm bg-slate-50/50">
           <CardHeader>
             <CardTitle>Administrative Actions</CardTitle>
-            <CardDescription>Quick links for system management</CardDescription>
+            <CardDescription>Direct navigation to system control panels</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-3 text-sm">
-              <div className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer" onClick={() => window.location.href = '/manage/users'}>
-                <div className="font-medium text-foreground">User Management</div>
-                <div className="text-xs text-muted-foreground mt-1">Suspend accounts, adjust balances, and audit user activity logs.</div>
-              </div>
-              <div className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer" onClick={() => window.location.href = '/manage/numbers'}>
-                <div className="font-medium text-foreground">Virtual Inventory</div>
-                <div className="text-xs text-muted-foreground mt-1">Add or remove leased lines, and monitor routing connectivity and status.</div>
-              </div>
-              <div className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer" onClick={() => window.location.href = '/manage/transactions'}>
-                <div className="font-medium text-foreground">Financial Ledger</div>
-                <div className="text-xs text-muted-foreground mt-1">Review all system debits, credits, and manual administrative transfers.</div>
-              </div>
+            <div className="space-y-2.5 text-sm">
+              <Link
+                href="/manage/services"
+                className="p-3 bg-white rounded-xl border border-slate-200/90 hover:border-blue-500 hover:shadow-sm transition-all flex items-start gap-3 block group"
+              >
+                <div className="p-2 rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                  <Layers className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">Services &amp; Pricing</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Carrier cost sync, profit margins (%/fixed), &amp; catalog rates.</div>
+                </div>
+              </Link>
+
+              <Link
+                href="/manage/settings"
+                className="p-3 bg-white rounded-xl border border-slate-200/90 hover:border-blue-500 hover:shadow-sm transition-all flex items-start gap-3 block group"
+              >
+                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                  <Settings className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">Payment Methods &amp; Settings</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Update JazzCash, EasyPaisa, Binance, USDT, &amp; WhatsApp.</div>
+                </div>
+              </Link>
+
+              <Link
+                href="/manage/users"
+                className="p-3 bg-white rounded-xl border border-slate-200/90 hover:border-blue-500 hover:shadow-sm transition-all flex items-start gap-3 block group"
+              >
+                <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <Users className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">User Management</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Adjust user balances, manage bans, and audit user logins.</div>
+                </div>
+              </Link>
+
+              <Link
+                href="/manage/transactions"
+                className="p-3 bg-white rounded-xl border border-slate-200/90 hover:border-blue-500 hover:shadow-sm transition-all flex items-start gap-3 block group"
+              >
+                <div className="p-2 rounded-lg bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                  <DollarSign className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors">Financial Ledger</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Audit debits, deposits, refunds, and admin balance adjustments.</div>
+                </div>
+              </Link>
+
+              <Link
+                href="/manage/numbers"
+                className="p-3 bg-white rounded-xl border border-slate-200/90 hover:border-blue-500 hover:shadow-sm transition-all flex items-start gap-3 block group"
+              >
+                <div className="p-2 rounded-lg bg-slate-100 text-slate-700 group-hover:bg-slate-900 group-hover:text-white transition-colors">
+                  <Smartphone className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900 group-hover:text-slate-900 transition-colors">Virtual Inventory</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Inventory pool sync, lease tracking, and line availability.</div>
+                </div>
+              </Link>
             </div>
           </CardContent>
         </Card>

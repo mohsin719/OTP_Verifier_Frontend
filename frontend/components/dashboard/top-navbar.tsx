@@ -47,7 +47,7 @@ export function TopNavbar({
   balanceLoading,
   onAddBalance,
 }: {
-  user: AuthUser;
+  user: AuthUser | null;
   balanceLabel?: string;
   balancePkr?: number | null;
   balanceLoading: boolean;
@@ -196,17 +196,24 @@ export function TopNavbar({
           {/* Compact, Sleek Balance Button with Dual Currency ($ USD & Rs PKR) */}
           <button
             type="button"
-            onClick={onAddBalance}
+            onClick={() => {
+              if (!user) {
+                toast.info("Please sign in to view and recharge your wallet balance.");
+                router.push("/login?redirect=/deposit");
+                return;
+              }
+              router.push("/deposit");
+            }}
             className="flex items-center gap-2 h-8.5 rounded-full border border-slate-200/90 bg-white hover:border-blue-400 hover:bg-blue-50/40 pl-2.5 pr-2 shadow-2xs hover:shadow-xs transition-all cursor-pointer group active:scale-97 select-none"
             aria-label={`Current Balance: ${displayUsd} ${displayPkr}. Click to add funds.`}
-            title="Click to recharge balance"
+            title={user ? "Click to recharge balance" : "Sign in to recharge balance"}
             id="top-nav-balance-btn"
           >
             <div className="flex items-center gap-1.5">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 border border-blue-100/60 group-hover:bg-blue-100 transition-colors">
                 <Wallet className="h-3 w-3" />
               </span>
-              {balanceLoading ? (
+              {balanceLoading && user ? (
                 <span className="h-3.5 w-16 animate-pulse rounded bg-slate-200 inline-block" />
               ) : (
                 <div className="flex items-baseline gap-1.5 leading-none">
@@ -231,87 +238,98 @@ export function TopNavbar({
             </span>
           </button>
 
-          {/* Profile Dropdown Trigger & Popover */}
-          <div className="relative" ref={profileMenuRef}>
-            <button
-              type="button"
-              onClick={() => setProfileOpen((prev) => !prev)}
-              className={cn(
-                "flex items-center gap-1.5 h-8 pl-1 pr-2.5 rounded-full border border-slate-200/90 bg-white hover:border-blue-300 hover:bg-blue-50/30 transition-all select-none group shadow-2xs cursor-pointer",
-                profileOpen && "border-blue-500 ring-2 ring-blue-100 bg-blue-50/20",
-              )}
-              aria-label="Account menu"
-              aria-expanded={profileOpen}
-              aria-haspopup="menu"
-              id="top-nav-avatar-btn"
-            >
-              <div className="relative">
-                <UserAvatar
-                  userId={user.id}
-                  username={user.username}
-                  publicId={user.publicId}
-                  className="h-6 w-6 ring-1 ring-slate-200"
-                />
-                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-1.5 ring-white" />
-              </div>
-              <span className="hidden lg:inline text-xs font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">
-                {user.username ?? user.publicId}
-              </span>
-              <ChevronDown
+          {/* Profile Dropdown Trigger & Popover if user is logged in, else direct Sign In button */}
+          {user ? (
+            <div className="relative" ref={profileMenuRef}>
+              <button
+                type="button"
+                onClick={() => setProfileOpen((prev) => !prev)}
                 className={cn(
-                  "h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-transform duration-200",
-                  profileOpen && "rotate-180 text-blue-600",
+                  "flex items-center gap-1.5 h-8 pl-1 pr-2.5 rounded-full border border-slate-200/90 bg-white hover:border-blue-300 hover:bg-blue-50/30 transition-all select-none group shadow-2xs cursor-pointer",
+                  profileOpen && "border-blue-500 ring-2 ring-blue-100 bg-blue-50/20",
                 )}
-              />
-            </button>
-
-            {/* Profile Floating Dropdown Menu */}
-            {profileOpen && (
-              <div
-                className="absolute right-0 mt-2 w-56 rounded-2xl border border-slate-200/90 bg-white p-2 shadow-xl shadow-slate-200/60 z-50 animate-in fade-in-0 zoom-in-95 duration-150"
-                role="menu"
-                aria-orientation="vertical"
+                aria-label="Account menu"
+                aria-expanded={profileOpen}
+                aria-haspopup="menu"
+                id="top-nav-avatar-btn"
               >
-                {/* User Info Header */}
-                <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                  <p className="text-xs font-bold text-slate-900 truncate">
-                    {user.username || "User"}
-                  </p>
-                  <p className="text-[11px] text-slate-500 truncate font-mono">
-                    {user.email || user.publicId}
-                  </p>
-                  {user.role === "ADMIN" && (
-                    <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200/70 text-[9px] font-black uppercase tracking-wider">
-                      Administrator
-                    </span>
-                  )}
+                <div className="relative">
+                  <UserAvatar
+                    userId={user.id}
+                    username={user.username ?? "User"}
+                    publicId={user.publicId ?? "USER"}
+                    className="h-6 w-6 ring-1 ring-slate-200"
+                  />
+                  <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-1.5 ring-white bg-emerald-500" />
                 </div>
+                <span className="hidden lg:inline text-xs font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">
+                  {user.username ?? user.publicId}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-transform duration-200",
+                    profileOpen && "rotate-180 text-blue-600",
+                  )}
+                />
+              </button>
 
-                {/* Settings Link Button */}
-                <Link
-                  href="/settings"
-                  prefetch={false}
-                  onClick={() => setProfileOpen(false)}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50/60 rounded-xl transition-colors cursor-pointer select-none"
-                  role="menuitem"
+              {/* Profile Floating Dropdown Menu */}
+              {profileOpen && (
+                <div
+                  className="absolute right-0 mt-2 w-56 rounded-2xl border border-slate-200/90 bg-white p-2 shadow-xl shadow-slate-200/60 z-50 animate-in fade-in-0 zoom-in-95 duration-150"
+                  role="menu"
+                  aria-orientation="vertical"
                 >
-                  <Settings className="h-4 w-4 text-slate-400 group-hover:text-blue-600" />
-                  <span>Settings</span>
-                </Link>
+                  {/* User Info Header */}
+                  <div className="px-3 py-2 border-b border-slate-100 mb-1">
+                    <p className="text-xs font-bold text-slate-900 truncate">
+                      {user.username || "User"}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate font-mono">
+                      {user.email || user.publicId}
+                    </p>
+                    {user.role === "ADMIN" && (
+                      <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200/70 text-[9px] font-black uppercase tracking-wider">
+                        Administrator
+                      </span>
+                    )}
+                  </div>
 
-                {/* Logout Action Button */}
-                <button
-                  type="button"
-                  onClick={() => void handleLogout()}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50/70 rounded-xl transition-colors cursor-pointer select-none text-left mt-0.5"
-                  role="menuitem"
-                >
-                  <LogOut className="h-4 w-4 text-red-500" />
-                  <span>Logout</span>
-                </button>
-              </div>
-            )}
-          </div>
+                  {/* Settings Link Button */}
+                  <Link
+                    href="/settings"
+                    prefetch={false}
+                    onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50/60 rounded-xl transition-colors cursor-pointer select-none"
+                    role="menuitem"
+                  >
+                    <Settings className="h-4 w-4 text-slate-400 group-hover:text-blue-600" />
+                    <span>Settings</span>
+                  </Link>
+
+                  {/* Logout Action Button */}
+                  <button
+                    type="button"
+                    onClick={() => void handleLogout()}
+                    className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50/70 rounded-xl transition-colors cursor-pointer select-none text-left mt-0.5"
+                    role="menuitem"
+                  >
+                    <LogOut className="h-4 w-4 text-red-500" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              prefetch={false}
+              className="inline-flex items-center justify-center h-8.5 px-4 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-2xs hover:shadow-xs active:scale-97 transition-all cursor-pointer select-none"
+              id="top-nav-signin-btn"
+            >
+              Sign In
+            </Link>
+          )}
 
           <button
             type="button"
@@ -377,77 +395,98 @@ export function TopNavbar({
               );
             })}
 
-            {/* Mobile Settings */}
-            <Link
-              href={profileHref}
-              prefetch={false}
-              className={cn(
-                "top-nav__drawer-link",
-                isNavActive(pathname, profileHref) &&
-                  "top-nav__drawer-link--active",
-              )}
-              onClick={() => setDrawerOpen(false)}
-            >
-              <span className="top-nav__drawer-icon">
-                <Settings className="h-4 w-4" />
-              </span>
-              Settings
-            </Link>
+            {/* Mobile Settings & Logout if logged in */}
+            {user ? (
+              <>
+                <Link
+                  href={profileHref}
+                  prefetch={false}
+                  className={cn(
+                    "top-nav__drawer-link",
+                    isNavActive(pathname, profileHref) &&
+                      "top-nav__drawer-link--active",
+                  )}
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  <span className="top-nav__drawer-icon">
+                    <Settings className="h-4 w-4" />
+                  </span>
+                  Settings
+                </Link>
 
-            {/* Mobile Logout */}
-            <button
-              type="button"
-              onClick={() => void handleLogout()}
-              className="top-nav__drawer-link text-red-600 hover:bg-red-50/50 w-full text-left cursor-pointer"
-            >
-              <span className="top-nav__drawer-icon text-red-500">
-                <LogOut className="h-4 w-4" />
-              </span>
-              Logout
-            </button>
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  className="top-nav__drawer-link text-red-600 hover:bg-red-50/50 w-full text-left cursor-pointer"
+                >
+                  <span className="top-nav__drawer-icon text-red-500">
+                    <LogOut className="h-4 w-4" />
+                  </span>
+                  Logout
+                </button>
+              </>
+            ) : null}
           </nav>
 
           <div className="top-nav__drawer-wallet">
-            {/* Clickable Mobile Wallet Card with Clean Outline + */}
-            <button
-              type="button"
-              onClick={() => {
-                setDrawerOpen(false);
-                onAddBalance();
-              }}
-              className="w-full flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200/90 hover:border-blue-300 hover:bg-blue-50/40 transition-all shadow-2xs group cursor-pointer text-left"
-              title="Click to recharge wallet"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 border border-blue-100 text-blue-600 group-hover:bg-blue-100 transition-colors">
-                  <Wallet className="h-4 w-4" />
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
-                    Wallet Balance
-                  </span>
-                  {balanceLoading ? (
-                    <span className="mt-0.5 h-4 w-20 animate-pulse rounded bg-slate-200 inline-block" />
-                  ) : (
-                    <div className="flex items-baseline gap-1.5 mt-0.5">
-                      <span className="text-sm font-black text-slate-900 tabular-nums group-hover:text-blue-700 transition-colors">
-                        {displayUsd}
-                      </span>
-                      {displayPkr && (
-                        <span className="text-xs font-semibold text-slate-400 tabular-nums">
-                          ({displayPkr})
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
+            {!user ? (
+              <div className="p-1">
+                <Link
+                  href="/login"
+                  prefetch={false}
+                  onClick={() => setDrawerOpen(false)}
+                  className="w-full flex items-center justify-center py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors"
+                >
+                  Sign In
+                </Link>
               </div>
+            ) : (
+              /* Clickable Mobile Wallet Card with Clean Outline + */
+              <button
+                type="button"
+                onClick={() => {
+                  setDrawerOpen(false);
+                  if (!user) {
+                    toast.info("Please sign in to view and recharge your wallet balance.");
+                    router.push("/login?redirect=/deposit");
+                    return;
+                  }
+                  router.push("/deposit");
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200/90 hover:border-blue-300 hover:bg-blue-50/40 transition-all shadow-2xs group cursor-pointer text-left"
+                title="Click to recharge wallet"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 border border-blue-100 text-blue-600 group-hover:bg-blue-100 transition-colors">
+                    <Wallet className="h-4 w-4" />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
+                      Wallet Balance
+                    </span>
+                    {balanceLoading ? (
+                      <span className="mt-0.5 h-4 w-20 animate-pulse rounded bg-slate-200 inline-block" />
+                    ) : (
+                      <div className="flex items-baseline gap-1.5 mt-0.5">
+                        <span className="text-sm font-black text-slate-900 tabular-nums group-hover:text-blue-700 transition-colors">
+                          {displayUsd}
+                        </span>
+                        {displayPkr && (
+                          <span className="text-xs font-semibold text-slate-400 tabular-nums">
+                            ({displayPkr})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-              {/* Clean non-filled outline + icon */}
-              <span className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-300 text-blue-600 bg-transparent group-hover:bg-blue-50 group-hover:border-blue-500 transition-all shrink-0">
-                <Plus className="h-4 w-4 stroke-[2.5]" />
-              </span>
-            </button>
+                {/* Clean non-filled outline + icon */}
+                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-300 text-blue-600 bg-transparent group-hover:bg-blue-50 group-hover:border-blue-500 transition-all shrink-0">
+                  <Plus className="h-4 w-4 stroke-[2.5]" />
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>

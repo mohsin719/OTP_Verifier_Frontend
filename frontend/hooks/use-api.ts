@@ -4,13 +4,17 @@ import { useAuthStore } from "@/stores/auth-store";
 
 export function useApi<T>(
   path: string | null,
-  options?: SWRConfiguration & { disableDedupe?: boolean; cacheTtlMs?: number }
+  options?: SWRConfiguration & {
+    disableDedupe?: boolean;
+    cacheTtlMs?: number;
+    allowAnonymous?: boolean;
+  }
 ) {
   const token = useAuthStore((s) => s.token);
   
   const fetcher = async (url: string) => {
     const res = await apiFetch<T>(url, {
-      accessToken: token,
+      accessToken: token ?? undefined,
       disableDedupe: options?.disableDedupe,
       cacheTtlMs: options?.cacheTtlMs,
     });
@@ -26,7 +30,7 @@ export function useApi<T>(
     return res.data;
   };
 
-  const key = path && token ? path : null;
+  const key = path ? (token || options?.allowAnonymous ? path : null) : null;
 
   return useSWR<T, Error>(key, fetcher, {
     revalidateOnFocus: false,

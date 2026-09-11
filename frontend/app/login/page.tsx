@@ -59,12 +59,28 @@ export default function LoginPage() {
       }
       setAuth(result.data.accessToken, result.data.user);
       const isRoleAdmin = result.data.user?.role === "ADMIN";
+      const searchRedirect =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("redirect")
+          : null;
+      const storedRedirect =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem("auth_redirect")
+          : null;
+      const targetRedirect = searchRedirect || storedRedirect;
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("auth_redirect");
+      }
+      const destination = isRoleAdmin
+        ? "/manage"
+        : (targetRedirect && targetRedirect.startsWith("/") ? targetRedirect : "/dashboard");
+
       toast.success(
         isRoleAdmin
           ? "Welcome Admin! Redirecting to admin panel..."
-          : "Welcome back! Redirecting to dashboard..."
+          : "Welcome back! Redirecting..."
       );
-      router.push(isRoleAdmin ? "/manage" : "/dashboard");
+      router.push(destination);
       router.refresh();
     } finally {
       setPending(false);
@@ -75,6 +91,13 @@ export default function LoginPage() {
   async function handleGoogleSignIn(): Promise<void> {
     setGooglePending(true);
     try {
+      const searchRedirect =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("redirect")
+          : null;
+      if (searchRedirect && typeof window !== "undefined") {
+        sessionStorage.setItem("auth_redirect", searchRedirect);
+      }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -84,7 +107,7 @@ export default function LoginPage() {
       if (error) {
         toast.error(error.message || "Failed to initiate Google sign in.");
       }
-    } catch (err: unknown) {
+    } catch {
       toast.error("Google authentication error.");
     } finally {
       setGooglePending(false);

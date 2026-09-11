@@ -290,7 +290,7 @@ export default function ServicesCatalogPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 pb-24">
+    <div className="mx-auto w-full max-w-6xl space-y-6 pb-4">
       {/* ─── Page Header / Mini Banner ─── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1">
         <div>

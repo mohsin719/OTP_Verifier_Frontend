@@ -239,48 +239,40 @@ export function PremiumSidebarProfile({
       className={cn(
         "premium-sidebar__profile group transition-all duration-200",
         active && "premium-sidebar__profile--active",
-        isAdmin && "hover:border-amber-500/30 hover:bg-amber-500/5",
       )}
     >
-      <div className="premium-sidebar__avatar-wrap relative">
+      <div className="premium-sidebar__avatar-wrap relative shrink-0">
         <UserAvatar
           userId={user.id}
           username={user.username}
           publicId={user.publicId}
           className={cn(
             "h-10 w-10 ring-2 transition-all",
-            isAdmin ? "ring-amber-400/50 shadow-sm shadow-amber-500/20" : "ring-white/10"
+            isAdmin ? "ring-blue-200 shadow-2xs" : "ring-slate-200"
           )}
         />
         <span
-          className={cn(
-            "premium-sidebar__online",
-            isAdmin && "bg-amber-400 ring-amber-900/60"
-          )}
+          className="premium-sidebar__online ring-2 ring-white"
           aria-label="Online"
         />
       </div>
       <div className="premium-sidebar__profile-info min-w-0 flex-1">
         <div className="flex items-center gap-1.5 min-w-0">
-          <p className="premium-sidebar__profile-name truncate font-bold">
+          <p className="premium-sidebar__profile-name truncate font-extrabold text-xs text-slate-900 group-hover:text-blue-600 transition-colors">
             {user.username || user.publicId}
           </p>
           {isAdmin && (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-gradient-to-r from-amber-500/25 to-yellow-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300 shadow-xs shrink-0">
-              <Shield className="h-2.5 w-2.5 text-amber-400" />
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-700 shadow-2xs shrink-0">
+              <Shield className="h-2.5 w-2.5 text-blue-600" />
               Admin
             </span>
           )}
         </div>
-        <p className="premium-sidebar__profile-email truncate text-[11px] text-slate-400 mt-0.5">
-          {isAdmin ? (
-            <span className="text-amber-200/70 font-medium">Administrator Panel</span>
-          ) : (
-            user.email
-          )}
+        <p className="premium-sidebar__profile-email truncate text-[11px] text-slate-500 font-semibold mt-0.5">
+          {isAdmin ? "Administrator Panel" : user.email}
         </p>
       </div>
-      <ChevronRight className="premium-sidebar__profile-arrow h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+      <ChevronRight className="premium-sidebar__profile-arrow h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 text-slate-400 group-hover:text-blue-600" />
     </Link>
   );
 }

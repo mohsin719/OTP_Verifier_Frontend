@@ -42,7 +42,9 @@ export default function RegisterPage() {
     e.preventDefault();
 
     if (!isValidPasswordFormat(password)) {
-      toast.error("Invalid password format. Please check the requirements and try again.");
+      toast.error("Password must start with an uppercase letter, be at least 8 characters, and include a lowercase letter, a digit, and a special character.", {
+        duration: 6000,
+      });
       return;
     }
 
@@ -81,7 +83,17 @@ export default function RegisterPage() {
     setAuth(result.data.accessToken, result.data.user);
     toast.success("Email verified successfully!");
     const isRoleAdmin = result.data.user?.role === "ADMIN";
-    router.push(isRoleAdmin ? "/manage" : "/dashboard");
+    const storedRedirect =
+      typeof window !== "undefined"
+        ? sessionStorage.getItem("auth_redirect")
+        : null;
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("auth_redirect");
+    }
+    const destination = isRoleAdmin
+      ? "/manage"
+      : (storedRedirect && storedRedirect.startsWith("/") ? storedRedirect : "/dashboard");
+    router.push(destination);
     router.refresh();
   }
 
