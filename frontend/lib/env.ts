@@ -22,8 +22,6 @@ function deriveWsUrl(apiUrl: string): string {
   return wsProtocolUrl;
 }
 
-// Rest of your functions (getPublicEnv, buildWhatsAppUrl) remain exactly the same
-
 export function getPublicEnv(): {
   apiUrl: string;
   wsUrl: string;
@@ -46,8 +44,3 @@ export function getPublicEnv(): {
   };
 }
 
-export function buildWhatsAppUrl(e164Digits: string, message: string): string {
-  const digitsOnly = e164Digits.replace(/\D/g, "");
-  const encoded = encodeURIComponent(message);
-  return `https://wa.me/${digitsOnly}?text=${encoded}`;
-}

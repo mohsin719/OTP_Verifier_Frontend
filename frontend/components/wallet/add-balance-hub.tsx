@@ -10,20 +10,18 @@ import {
   Sparkles,
   ArrowRight,
   ExternalLink,
-  MessageCircle,
   AlertCircle,
   HelpCircle,
   Wallet,
   Smartphone,
 } from "lucide-react";
 import { SiBinance, SiTether } from "react-icons/si";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   PAYMENT_METHODS,
-  ADMIN_WHATSAPP_NUMBER,
-  buildPaymentWhatsAppUrl,
   type PaymentMethodConfig,
 } from "@/lib/payment-methods";
 import { useAuthStore } from "@/stores/auth-store";
@@ -41,6 +39,7 @@ export function AddBalanceHub({
   onSuccessClose,
   compact = false,
 }: AddBalanceHubProps) {
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const { exchangeRate } = useCurrencyStore();
 
@@ -103,16 +102,6 @@ export function AddBalanceHub({
     }
   };
 
-  const whatsappUrl = useMemo(() => {
-    return buildPaymentWhatsAppUrl({
-      userId: user?.publicId || user?.id || "N/A",
-      methodTitle: activeMethod.title,
-      networkOrBank: activeMethod.networkOrBank,
-      amountPkr: computedDual.pkr > 0 ? computedDual.pkr : undefined,
-      amountUsd: computedDual.usd > 0 ? computedDual.usd : undefined,
-      txId: userTxId,
-    });
-  }, [user, activeMethod, computedDual, userTxId]);
 
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
     activeMethod.accountNumberOrAddress
@@ -404,18 +393,19 @@ export function AddBalanceHub({
           />
         </div>
 
-        {/* ─── WhatsApp Action CTA ─── */}
+        {/* ─── Manual Verification Action CTA ─── */}
         <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
           <Button
             type="button"
-            className="flex-1 h-11 font-extrabold text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 rounded-xl gap-2 cursor-pointer"
+            className="flex-1 h-11 font-extrabold text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 rounded-xl gap-2 cursor-pointer"
             onClick={() => {
-              window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+              const amt = amountCurrency === "USD" ? computedDual.usd : computedDual.pkr;
+              router.push(`/deposit?method=${activeMethod.id}&amount=${amt}&txid=${encodeURIComponent(userTxId)}`);
               if (onSuccessClose) onSuccessClose();
             }}
           >
-            <MessageCircle className="h-4 w-4" />
-            <span>Send Proof on WhatsApp</span>
+            <ShieldCheck className="h-4 w-4" />
+            <span>Submit Payment Proof &amp; Verify</span>
             <ArrowRight className="h-3.5 w-3.5 ml-auto" />
           </Button>
 
@@ -424,7 +414,7 @@ export function AddBalanceHub({
             variant="outline"
             onClick={() =>
               copyToClipboard(
-                `Deposit Request:\nUser ID: ${user?.publicId || "N/A"}\nMethod: ${activeMethod.title}\nAmount: $${computedDual.usd} (Rs ${computedDual.pkr})\nTxID: ${userTxId || "Attached via screenshot"}`,
+                `Deposit Request:\nUser ID: ${user?.publicId || "N/A"}\nMethod: ${activeMethod.title}\nAmount: $${computedDual.usd} (Rs ${computedDual.pkr})\nTxID: ${userTxId || "Pending submission"}`,
                 "Deposit Details",
                 "proof-msg"
               )

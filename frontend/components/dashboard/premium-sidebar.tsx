@@ -121,6 +121,8 @@ export function PremiumSidebarNavLink({
   active,
   pathname,
   onNavigate,
+  badgeCount,
+  showDot,
 }: {
   href: string;
   label: string;
@@ -128,6 +130,8 @@ export function PremiumSidebarNavLink({
   active?: boolean;
   pathname?: string;
   onNavigate?: () => void;
+  badgeCount?: number;
+  showDot?: boolean;
 }): ReactElement {
   const isActive = active ?? (pathname ? isNavActive(pathname, href) : false);
   const itemClass = isActive
@@ -144,10 +148,21 @@ export function PremiumSidebarNavLink({
       aria-current={isActive ? "page" : undefined}
     >
       <span className="premium-sidebar__nav-glow" aria-hidden />
-      <span className="premium-sidebar__icon-box">
+      <span className="premium-sidebar__icon-box relative">
         <Icon className="h-4 w-4" />
+        {showDot && (
+          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500 border border-white" />
+          </span>
+        )}
       </span>
-      <span className="truncate">{label}</span>
+      <span className="truncate flex-1">{label}</span>
+      {typeof badgeCount === "number" && badgeCount > 0 && (
+        <span className="ml-auto shrink-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-white shadow-xs">
+          {badgeCount}
+        </span>
+      )}
     </Link>
   );
 }
@@ -298,11 +313,15 @@ export function PremiumSidebarShell({
     href: string;
     label: string;
     icon: ComponentType<{ className?: string }>;
+    badgeCount?: number;
+    showDot?: boolean;
   }>;
   adminNav: Array<{
     href: string;
     label: string;
     icon: ComponentType<{ className?: string }>;
+    badgeCount?: number;
+    showDot?: boolean;
   }>;
   showAdmin: boolean;
   pathname: string;

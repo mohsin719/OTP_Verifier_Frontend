@@ -1,11 +1,12 @@
 "use client";
 
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement, ReactNode, ComponentType } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  ArrowDownToLine,
   CreditCard,
   History,
   Layers,
@@ -15,23 +16,35 @@ import {
   Settings,
   Shield,
   Users,
+  WalletCards,
   X,
+  Loader2,
 } from "lucide-react";
 import { PremiumSidebarShell } from "@/components/dashboard/premium-sidebar";
 import { TopNavbar } from "@/components/dashboard/top-navbar";
 import { DashboardFooter } from "@/components/dashboard/dashboard-footer";
-import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { apiFetch, AUTH_UNAUTHORIZED_EVENT } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth-store";
 import { useWalletStore } from "@/stores/wallet-store";
 import { useCurrencyStore, formatDualBalance } from "@/lib/currency";
+import { useTopupNotificationStore } from "@/stores/topup-notification-store";
 
 const WALLET_CACHE_TTL_MS = 30_000;
 
-const adminNav = [
+export type AdminNavItem = {
+  href: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  badgeCount?: number;
+  showDot?: boolean;
+};
+
+const adminNav: AdminNavItem[] = [
   { href: "/manage", label: "Admin Overview", icon: LayoutDashboard },
+  { href: "/manage/topups", label: "Top-up Requests", icon: ArrowDownToLine },
+  { href: "/manage/payment-methods", label: "Payment Methods", icon: WalletCards },
   { href: "/manage/services", label: "Services & Pricing", icon: Layers },
   { href: "/manage/platform-status", label: "Platform Status", icon: Activity },
   { href: "/manage/failure-logs", label: "Failure Logs", icon: AlertTriangle },
@@ -54,11 +67,23 @@ export function DashboardShell({
   const { balancePkr, ownerUserId, lastFetchedAt, fetchBalance, invalidate, setLoading } =
     useWalletStore();
   const { exchangeRate, fetchExchangeRate } = useCurrencyStore();
+  const { pendingCount, fetchPendingCount } = useTopupNotificationStore();
   const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
     void fetchExchangeRate();
   }, [fetchExchangeRate]);
+
+  useEffect(() => {
+    if (!token || user?.role !== "ADMIN") return;
+    void fetchPendingCount(token);
+
+    const interval = setInterval(() => {
+      void fetchPendingCount(token);
+    }, 20_000);
+
+    return () => clearInterval(interval);
+  }, [token, user?.role, fetchPendingCount]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -212,12 +237,27 @@ export function DashboardShell({
 
   /* Admin layout: dedicated sidebar + mobile header, strictly for ADMIN accounts */
   if (isAdminUser && user) {
+    const dynamicAdminNav: AdminNavItem[] = adminNav.map((item) => {
+      if (item.href === "/manage/topups") {
+        return {
+          ...item,
+          showDot: pendingCount > 0,
+          badgeCount: pendingCount > 0 ? pendingCount : undefined,
+        };
+      }
+      return {
+        ...item,
+        showDot: false,
+        badgeCount: undefined,
+      };
+    });
+
     return (
       <div className="flex min-h-screen w-full max-w-[100vw] flex-col md:flex-row overflow-x-hidden">
         <PremiumSidebarShell
           headerHref="/manage"
           nav={[]}
-          adminNav={adminNav}
+          adminNav={dynamicAdminNav}
           showAdmin={true}
           pathname={pathname}
           showWallet={false}
@@ -262,7 +302,7 @@ export function DashboardShell({
         {/* Mobile Drawer for Admin */}
         {adminMobileOpen && (
           <div className="md:hidden fixed inset-x-0 top-[49px] bottom-0 z-40 bg-slate-950/95 backdrop-blur-md p-4 overflow-y-auto space-y-1">
-            {adminNav.map((item) => {
+            {dynamicAdminNav.map((item) => {
               const Icon = item.icon;
               const isActive =
                 item.href === "/manage"
@@ -280,8 +320,21 @@ export function DashboardShell({
                       : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   )}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
+                  <div className="relative shrink-0">
+                    <Icon className="h-4 w-4" />
+                    {item.showDot && (
+                      <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                      </span>
+                    )}
+                  </div>
+                  <span className="flex-1">{item.label}</span>
+                  {typeof item.badgeCount === "number" && item.badgeCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white shrink-0 shadow-xs">
+                      {item.badgeCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
