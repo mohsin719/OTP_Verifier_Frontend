@@ -185,6 +185,9 @@ function NumbersPageContent() {
     cacheTtlMs: 0,
     keepPreviousData: false,
     revalidateOnMount: true,
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+    dedupingInterval: 0,
   });
   const {
     data: tariffPayload,
@@ -603,9 +606,9 @@ function NumbersPageContent() {
       auth: { token },
       transports: ["websocket", "polling"],
       reconnection: true,
-      reconnectionAttempts: 4,
-      reconnectionDelay: 1500,
-      reconnectionDelayMax: 8000,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       timeout: 8000,
     });
 
@@ -644,13 +647,28 @@ function NumbersPageContent() {
       toast.success("OTP received!", { duration: 4000 });
     };
 
+    const resumeSocket = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+      if (!socket.connected) {
+        socket.connect();
+      }
+    };
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
     socket.io.on("reconnect_failed", onReconnectFailed);
     socket.on("otp:received", onOtpReceived);
+    document.addEventListener("visibilitychange", resumeSocket);
+    window.addEventListener("pageshow", resumeSocket);
+    window.addEventListener("focus", resumeSocket);
 
     return () => {
+      document.removeEventListener("visibilitychange", resumeSocket);
+      window.removeEventListener("pageshow", resumeSocket);
+      window.removeEventListener("focus", resumeSocket);
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
@@ -668,29 +686,93 @@ function NumbersPageContent() {
     displayOtp,
   ]);
 
-  // Silent background sync — fixed 10s interval, no Refresh Status button disruption.
-  useEffect(() => {
-    if (!token || !isWaitingForOtp) {
-      return;
-    }
-    const intervalId = window.setInterval(() => {
-      revalidateActive();
-    }, BACKGROUND_SYNC_INTERVAL_MS);
-    return () => window.clearInterval(intervalId);
-  }, [token, isWaitingForOtp, revalidateActive]);
-
   // Fast-poll fallback: keep polling while pending so first OTP is never missed,
   // even if socket room handoff races with initial webhook emit.
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const otpSyncInFlightRef = useRef(false);
   const currentDisplayE164Ref = useRef<string | null>(null);
   const currentDisplayOtpRequestIdRef = useRef<string | null>(null);
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
 
   useEffect(() => {
     currentDisplayE164Ref.current = displayActiveSession?.e164 ?? null;
     currentDisplayOtpRequestIdRef.current =
       displayActiveSession?.otpRequestId ?? null;
   }, [displayActiveSession?.e164, displayActiveSession?.otpRequestId]);
+
+  const announceOtp = useCallback(
+    (otp: string, e164: string) => {
+      const currentDigits = currentDisplayE164Ref.current?.replace(/\D/g, "");
+      const incomingDigits = e164.replace(/\D/g, "");
+      if (!otp || !currentDigits || currentDigits !== incomingDigits) {
+        return false;
+      }
+      if (otpAnnouncedRef.current === e164) {
+        setPolledOtp(otp);
+        return false;
+      }
+      otpAnnouncedRef.current = e164;
+      setPolledOtp(otp);
+      revalidateActive();
+      setOtpFlash(true);
+      window.setTimeout(() => setOtpFlash(false), 2500);
+      toast.success("OTP received!", { id: `otp-received-${e164}` });
+      return true;
+    },
+    [revalidateActive],
+  );
+
+  const syncOtpNow = useCallback(async (force = false) => {
+    const accessToken = tokenRef.current;
+    const e164 = currentDisplayE164Ref.current;
+    const otpRequestId = currentDisplayOtpRequestIdRef.current;
+    if (!accessToken || !e164 || (!force && otpSyncInFlightRef.current)) {
+      return;
+    }
+
+    otpSyncInFlightRef.current = true;
+    try {
+      revalidateActive();
+
+      const pollRes = await apiFetch<{ status: string; otp?: string }>(
+        `/api/otp/poll?number=${encodeURIComponent(e164)}`,
+        { accessToken, disableDedupe: true, cacheTtlMs: 0 },
+      );
+      if (
+        pollRes.success &&
+        pollRes.data?.status === "received" &&
+        pollRes.data.otp
+      ) {
+        announceOtp(pollRes.data.otp, e164);
+        return;
+      }
+
+      if (!otpRequestId) {
+        return;
+      }
+
+      const statusRes = await apiFetch<{
+        status: string;
+        otpCode: string | null;
+      }>(`/api/otp/status/${otpRequestId}`, {
+        accessToken,
+        disableDedupe: true,
+        cacheTtlMs: 0,
+      });
+      if (
+        statusRes.success &&
+        statusRes.data?.otpCode &&
+        statusRes.data.status === "RECEIVED"
+      ) {
+        announceOtp(statusRes.data.otpCode, e164);
+      }
+    } catch {
+      /* silent — next tick / visibility resume retries */
+    } finally {
+      otpSyncInFlightRef.current = false;
+    }
+  }, [announceOtp, revalidateActive]);
 
   useEffect(() => {
     const awaitingOtp =
@@ -699,63 +781,52 @@ function NumbersPageContent() {
       !displayOtp;
 
     if (!displayActiveSession?.e164 || !token || !awaitingOtp) {
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = null;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
+      if (pollRef.current) {
+        window.clearTimeout(pollRef.current);
+        pollRef.current = null;
       }
       return;
     }
-    const e164 = displayActiveSession.e164;
 
-    const doPoll = async () => {
-      // Cancel previous request if still pending
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+    let cancelled = false;
+
+    const scheduleNext = () => {
+      if (cancelled) {
+        return;
       }
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      
-      try {
-        const res = await apiFetch<{ status: string; otp?: string }>(`/api/otp/poll?number=${encodeURIComponent(e164)}`, {
-          accessToken: token,
-          disableDedupe: true,
-          cacheTtlMs: 0,
-        });
-        if (!controller.signal.aborted && res.success && res.data?.status === "received") {
-          const currentDigits = currentDisplayE164Ref.current?.replace(/\D/g, "");
-          const pollDigits = e164.replace(/\D/g, "");
-          if (!currentDigits || currentDigits !== pollDigits) {
-            return;
-          }
-          if (otpAnnouncedRef.current === e164) {
-            return;
-          }
-          otpAnnouncedRef.current = e164;
-          if (res.data.otp) {
-            setPolledOtp(res.data.otp);
-          }
-          revalidateActive();
-          setOtpFlash(true);
-          setTimeout(() => setOtpFlash(false), 2500);
-          toast.success("OTP received via poll!", { id: `otp-received-${e164}` });
-        }
-      } catch { /* silent */ } finally {
-        if (abortControllerRef.current === controller) {
-          abortControllerRef.current = null;
-        }
-      }
+      pollRef.current = window.setTimeout(() => {
+        void (async () => {
+          await syncOtpNow();
+          scheduleNext();
+        })();
+      }, BACKGROUND_SYNC_INTERVAL_MS);
     };
-    void doPoll();
-    pollRef.current = setInterval(() => void doPoll(), 1500);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = null;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
+
+    void syncOtpNow().then(scheduleNext);
+
+    const resumeFromBackground = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
       }
+      // iOS can freeze a poll in the background and never run `finally`,
+      // which would otherwise skip every later check until pull-to-refresh.
+      otpSyncInFlightRef.current = false;
+      void syncOtpNow(true);
+    };
+
+    document.addEventListener("visibilitychange", resumeFromBackground);
+    window.addEventListener("pageshow", resumeFromBackground);
+    window.addEventListener("focus", resumeFromBackground);
+
+    return () => {
+      cancelled = true;
+      if (pollRef.current) {
+        window.clearTimeout(pollRef.current);
+        pollRef.current = null;
+      }
+      document.removeEventListener("visibilitychange", resumeFromBackground);
+      window.removeEventListener("pageshow", resumeFromBackground);
+      window.removeEventListener("focus", resumeFromBackground);
     };
   }, [
     displayActiveSession?.e164,
@@ -763,7 +834,7 @@ function NumbersPageContent() {
     displayActiveSession?.otpStatus,
     displayOtp,
     token,
-    revalidateActive,
+    syncOtpNow,
   ]);
 
   const previousE164Ref = useRef<string | null>(null);
