@@ -688,7 +688,7 @@ function NumbersPageContent() {
 
   // Fast-poll fallback: keep polling while pending so first OTP is never missed,
   // even if socket room handoff races with initial webhook emit.
-  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef = useRef<number | null>(null);
   const otpSyncInFlightRef = useRef(false);
   const currentDisplayE164Ref = useRef<string | null>(null);
   const currentDisplayOtpRequestIdRef = useRef<string | null>(null);

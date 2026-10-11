@@ -457,6 +457,19 @@ export async function authVerifySignup(
   });
 }
 
+export async function authResendSignupOtp(
+  body: { email: string },
+): Promise<ApiResult<{ success: boolean; message?: string }>> {
+  return apiFetch<{ success: boolean; message?: string }>(
+    '/api/auth/resend-signup-otp',
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+      skipAuthRefresh: true,
+    },
+  );
+}
+
 export async function authRefresh(): Promise<
   ApiResult<{ accessToken: string; user: AuthUser }>
 > {

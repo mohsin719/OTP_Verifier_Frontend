@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { authRegister, authVerifySignup } from "@/lib/api";
+import { authRegister, authVerifySignup, authResendSignupOtp } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { GuestOnly } from "@/components/auth/guest-only";
 import { Check, AlertCircle } from "lucide-react";
@@ -77,6 +77,16 @@ export default function RegisterPage() {
   const [pending, setPending] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendPending, setResendPending] = useState(false);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const rules = getPasswordRules(password);
   const strength = getPasswordStrength(rules);
@@ -113,7 +123,21 @@ export default function RegisterPage() {
       return;
     }
     setOtpSent(true);
+    setResendCooldown(45);
     toast.success("Account created. Check your email for the verification code.");
+  }
+
+  async function handleResendOtp(): Promise<void> {
+    if (!email || resendCooldown > 0 || resendPending) return;
+    setResendPending(true);
+    const result = await authResendSignupOtp({ email });
+    setResendPending(false);
+    if (!result.success) {
+      toast.error(result.error || "Failed to resend code.");
+      return;
+    }
+    toast.success("A fresh verification code has been sent to your email.");
+    setResendCooldown(45);
   }
 
   async function onVerifyOtp(e: FormEvent<HTMLFormElement>): Promise<void> {
@@ -296,6 +320,21 @@ export default function RegisterPage() {
               <Button type="submit" className="w-full" disabled={pending}>
                 {pending ? "Verifying…" : "Verify"}
               </Button>
+              <div className="flex items-center justify-between pt-1">
+                <Button
+                  type="button"
+                  variant="link"
+                  className="p-0 h-auto text-xs text-muted-foreground hover:text-primary"
+                  disabled={resendCooldown > 0 || resendPending}
+                  onClick={() => void handleResendOtp()}
+                >
+                  {resendPending
+                    ? "Sending…"
+                    : resendCooldown > 0
+                    ? `Resend code in ${resendCooldown}s`
+                    : "Didn't receive code? Resend"}
+                </Button>
+              </div>
               <Button
                 type="button"
                 variant="ghost"
