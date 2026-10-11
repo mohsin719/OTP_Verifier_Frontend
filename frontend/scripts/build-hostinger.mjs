@@ -43,7 +43,7 @@ for (const [key, value] of Object.entries(PRODUCTION_PUBLIC_ENV)) {
   console.log(`  ${key}=${value}`);
 }
 
-const nextBuild = spawnSync("npx", ["next", "build"], {
+const nextBuild = spawnSync("npx", ["next", "build", "--webpack"], {
   env,
   stdio: "inherit",
   shell: true,
